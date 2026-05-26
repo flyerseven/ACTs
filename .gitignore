@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+*.egg
+
+# Development artifacts
+*_bak.py
+Plan.md
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Runtime data (API keys, sessions, vault)
+Acts/
+*.key
+
+# Claude Code local settings
+.claude/
+CLAUDE.md.local
+
+# OS
+.DS_Store
+Thumbs.db

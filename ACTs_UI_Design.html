@@ -1,0 +1,1894 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ACTs — UI Design Reference</title>
+<style>
+/* ============================================================
+   ACTs Design System Tokens (from ui-ux-pro-max)
+   Background: 135deg gradient #0F172A → #1E293B → #0F172A
+   Primary: rgba(30,41,59,0.85)  Secondary: rgba(51,65,85,0.8)
+   CTA: #22C55E  Text: #F8FAFC  Muted: #94A3B8  Border: rgba(51,65,85,0.4)
+   Heading: JetBrains Mono   Body: IBM Plex Sans
+   Glass Morphism: backdrop-filter blur across all surface layers
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg-root:       linear-gradient(135deg, #0F172A 0%, #1E293B 30%, #0F172A 100%);
+  --bg-surface:    rgba(30, 41, 59, 0.85);
+  --bg-elevated:   rgba(37, 51, 73, 0.9);
+  --bg-input:      rgba(15, 23, 42, 0.7);
+  --bg-hover:      rgba(45, 59, 82, 0.6);
+  --bg-active:     rgba(51, 65, 85, 0.8);
+
+  --border:        rgba(51, 65, 85, 0.4);
+  --border-light:  rgba(71, 85, 105, 0.6);
+
+  --text-primary:  #F8FAFC;
+  --text-secondary:#CBD5E1;
+  --text-muted:    #94A3B8;
+  --text-disabled: #64748B;
+
+  --cta:           #22C55E;
+  --cta-hover:     #16A34A;
+  --cta-text:      #052E16;
+
+  --accent-blue:   #3B82F6;
+  --accent-cyan:   #06B6D4;
+  --accent-purple: #8B5CF6;
+  --accent-amber:  #F59E0B;
+  --accent-red:    #EF4444;
+  --accent-pink:   #EC4899;
+
+  --font-mono:  'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  --font-sans:  'IBM Plex Sans', -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+
+  --radius-sm:  4px;
+  --radius-md:  8px;
+  --radius-lg:  12px;
+  --radius-xl:  16px;
+
+  --shadow-sm:  0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.03);
+  --shadow-md:  0 4px 16px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.04);
+  --shadow-lg:  0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
+
+  --sidebar-w:  220px;
+  --header-h:   48px;
+  --statusbar-h:28px;
+
+  --transition: 180ms ease;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg-root);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  overflow: hidden;
+  height: 100vh;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+/* ============================================================
+   MAIN LAYOUT — maps to QMainWindow + QSplitter
+   ============================================================ */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* ---- Title Bar ---- */
+.titlebar {
+  height: var(--header-h);
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  -webkit-app-region: drag;
+}
+.titlebar-logo {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--cta);
+  letter-spacing: 1px;
+}
+.titlebar-version {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--bg-root);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.titlebar-spacer { flex:1; }
+.titlebar-actions {
+  display: flex;
+  gap: 4px;
+  -webkit-app-region: no-drag;
+}
+.titlebar-btn {
+  width: 32px; height: 28px;
+  border: none; background: transparent;
+  color: var(--text-muted); font-size: 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer; transition: var(--transition);
+}
+.titlebar-btn:hover { background: var(--bg-hover); color: var(--text-primary); }
+
+/* ---- Main Body ---- */
+.main-body {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* ---- Sidebar ---- */
+.sidebar {
+  width: var(--sidebar-w);
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-tab {
+  flex: 1;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: var(--transition);
+}
+.sidebar-tab:hover { color: var(--text-secondary); background: var(--bg-hover); }
+.sidebar-tab.active {
+  color: var(--cta);
+  border-bottom-color: var(--cta);
+  background: rgba(34,197,94,0.05);
+}
+.sidebar-tab-icon { font-size: 15px; }
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Sidebar item list */
+.sidebar-list { list-style: none; padding: 4px 0; }
+.sidebar-item {
+  padding: 8px 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-left: 3px solid transparent;
+  transition: var(--transition);
+  font-size: 12.5px;
+}
+.sidebar-item:hover { background: var(--bg-hover); }
+.sidebar-item.active {
+  background: var(--bg-active);
+  border-left-color: var(--accent-blue);
+}
+.sidebar-item-avatar {
+  width: 28px; height: 28px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.sidebar-item-info { overflow: hidden; }
+.sidebar-item-name {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-item-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidebar-item-badge {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+/* Sidebar footer */
+.sidebar-footer {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+}
+.sidebar-add-btn {
+  width: 100%;
+  height: 34px;
+  border: 1px dashed var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.sidebar-add-btn:hover {
+  border-color: var(--cta);
+  color: var(--cta);
+  background: rgba(34,197,94,0.05);
+}
+
+/* ---- Main Content Area ---- */
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-root);
+}
+
+/* Panel container */
+.panel {
+  display: none;
+  flex: 1;
+  overflow: hidden;
+}
+.panel.active { display: flex; }
+
+/* ============================================================
+   AGENT PANEL — list + detail split
+   ============================================================ */
+.agent-panel { display: flex; flex:1; overflow:hidden; }
+
+/* Agent detail (full-width — navigation via sidebar) */
+.agent-detail {
+  flex: 1; overflow-y: auto;
+  padding: 24px 32px;
+}
+.agent-detail-empty {
+  flex: 1; display: flex;
+  align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 13px;
+}
+
+/* Form layout */
+.form-section {
+  margin-bottom: 28px;
+}
+.form-section-title {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.form-row {
+  display: flex; gap: 16px;
+  margin-bottom: 14px;
+}
+.form-group {
+  display: flex; flex-direction: column; gap: 5px;
+  flex: 1;
+}
+.form-group.full { flex: 1 1 100%; }
+.form-label {
+  font-size: 11.5px; font-weight: 500;
+  color: var(--text-secondary);
+}
+.form-label-required::after {
+  content: " *";
+  color: var(--accent-red);
+}
+.form-hint {
+  font-size: 10.5px; color: var(--text-disabled);
+  margin-top: 2px;
+}
+.form-input, .form-select, .form-textarea {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 8px 12px;
+  outline: none;
+  transition: var(--transition);
+}
+.form-input:focus, .form-textarea:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.form-select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2394A3B8' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+.form-textarea {
+  min-height: 180px; resize: vertical;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.form-slider-row {
+  display: flex; align-items: center; gap: 12px;
+}
+.form-slider {
+  flex: 1; height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+}
+.form-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px; height: 14px;
+  border-radius: 50%;
+  background: var(--accent-blue);
+  cursor: pointer;
+}
+.form-slider-value {
+  width: 36px; text-align: center;
+  font-family: var(--font-mono); font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Skills tags */
+.skills-list {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  margin-top: 8px;
+}
+.skill-tag {
+  display: flex; align-items: center; gap: 6px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  transition: var(--transition);
+}
+.skill-tag:hover { border-color: var(--accent-purple); }
+.skill-tag-remove {
+  cursor: pointer; color: var(--text-muted);
+  font-size: 14px; line-height: 1;
+}
+.skill-tag-remove:hover { color: var(--accent-red); }
+.skill-add-btn {
+  display: flex; align-items: center; gap: 4px;
+  background: transparent;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  padding: 5px 10px;
+  font-size: 11.5px; color: var(--text-muted);
+  cursor: pointer; transition: var(--transition);
+}
+.skill-add-btn:hover {
+  border-color: var(--accent-purple);
+  color: var(--accent-purple);
+}
+
+/* LLM Config mini cards */
+.llm-config-row {
+  display: flex; gap: 12px;
+}
+.llm-param-card {
+  flex: 1;
+  background: var(--bg-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+}
+.llm-param-card-label {
+  font-size: 10px; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.5px;
+  margin-bottom: 4px;
+}
+.llm-param-card-value {
+  font-family: var(--font-mono); font-size: 13px;
+  font-weight: 500;
+}
+
+/* Action bar */
+.action-bar {
+  display: flex; gap: 10px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  margin-top: 24px;
+}
+.btn {
+  height: 34px; padding: 0 18px;
+  border-radius: var(--radius-md);
+  font-family: var(--font-sans);
+  font-size: 12.5px; font-weight: 500;
+  cursor: pointer; transition: var(--transition);
+  display: flex; align-items: center; gap: 6px;
+  border: none;
+}
+.btn-primary {
+  background: var(--cta); color: var(--cta-text);
+}
+.btn-primary:hover { background: var(--cta-hover); }
+.btn-secondary {
+  background: var(--bg-elevated); color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+.btn-secondary:hover { background: var(--bg-hover); border-color: var(--border-light); }
+.btn-danger {
+  background: transparent; color: var(--accent-red);
+  border: 1px solid rgba(239,68,68,0.3);
+}
+.btn-danger:hover { background: rgba(239,68,68,0.1); border-color: var(--accent-red); }
+
+/* ============================================================
+   TEAM PANEL
+   ============================================================ */
+.team-panel { display: flex; flex:1; overflow:hidden; }
+
+.team-detail {
+  flex: 1; overflow-y: auto;
+  padding: 24px 32px;
+}
+.team-detail-empty {
+  flex:1; display:flex; align-items:center; justify-content:center;
+  color: var(--text-muted); font-size: 13px;
+}
+
+/* Member composer */
+.member-composer {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.member-composer-header {
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted); letter-spacing: 0.5px;
+}
+.member-row {
+  display: flex; align-items: center;
+  padding: 8px 16px;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+  transition: var(--transition);
+  cursor: pointer;
+}
+.member-row:last-child { border-bottom: none; }
+.member-row:hover { background: var(--bg-hover); }
+.member-row.captain { background: rgba(34,197,94,0.06); }
+.member-row-crown {
+  color: var(--accent-amber); font-size: 15px;
+  margin-right: 2px;
+}
+.member-row-drag {
+  color: var(--text-disabled); cursor: grab;
+  font-size: 14px;
+}
+.member-row-drag:active { cursor: grabbing; }
+.member-row-avatar {
+  width: 32px; height: 32px;
+  border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+.member-row-info { flex:1; }
+.member-row-name { font-weight: 500; font-size: 12.5px; }
+.member-row-role { font-size: 11px; color: var(--text-muted); }
+.member-row-badge {
+  font-size: 10px; padding: 2px 8px;
+  border-radius: 10px; font-weight: 600;
+  background: rgba(34,197,94,0.15); color: var(--cta);
+}
+.member-add-btn {
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  border-top: 1px dashed var(--border);
+  width: 100%;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 6px;
+  transition: var(--transition);
+}
+.member-add-btn:hover { color: var(--cta); }
+
+/* ============================================================
+   SESSION PANEL
+   ============================================================ */
+.session-panel { display:flex; flex:1; overflow:hidden; }
+
+
+
+/* Chat area */
+.chat-area {
+  flex: 1; display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.chat-header {
+  height: 48px; min-height: 48px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 20px; gap: 12px;
+}
+.chat-header-target {
+  font-weight: 600; font-size: 13px;
+}
+.chat-header-badge {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px;
+  background: rgba(59,130,246,0.15); color: var(--accent-blue);
+  font-family: var(--font-mono);
+}
+.chat-messages {
+  flex: 1; overflow-y: auto;
+  padding: 20px 24px;
+  display: flex; flex-direction: column;
+  gap: 16px;
+}
+
+/* Message bubbles */
+.msg-row {
+  display: flex; gap: 12px;
+  max-width: 75%;
+}
+.msg-row.user { align-self: flex-end; flex-direction: row-reverse; }
+.msg-row.assistant { align-self: flex-start; }
+.msg-row.system { align-self: center; max-width: 90%; }
+
+.msg-avatar {
+  width: 32px; height: 32px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+.msg-bubble {
+  padding: 10px 14px; border-radius: var(--radius-lg);
+  font-size: 12.5px; line-height: 1.6;
+  word-break: break-word;
+  position: relative;
+}
+.msg-row.user .msg-bubble {
+  background: var(--accent-blue);
+  color: #fff;
+  border-bottom-right-radius: var(--radius-sm);
+}
+.msg-row.assistant .msg-bubble {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: var(--radius-sm);
+}
+.msg-row.system .msg-bubble {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.msg-time {
+  font-size: 10px;
+  color: var(--text-disabled);
+  margin-top: 4px;
+}
+.msg-row.user .msg-time { text-align: right; }
+
+/* Streaming cursor effect */
+.stream-cursor::after {
+  content: "|";
+  animation: blink 1s step-end infinite;
+  color: var(--cta);
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Orchestrator log */
+.orchestrator-log {
+  margin: 8px 0;
+  padding: 8px 14px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.orchestrator-log-line {
+  padding: 2px 0;
+  display: flex; gap: 8px;
+  color: var(--text-muted);
+}
+.orchestrator-log-arrow { color: var(--accent-cyan); }
+.orchestrator-log-agent { color: var(--accent-purple); }
+
+/* Chat input bar */
+.chat-input-bar {
+  padding: 12px 20px;
+  background: var(--bg-surface);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid var(--border);
+  display: flex; gap: 10px;
+  align-items: flex-end;
+}
+.chat-input {
+  flex: 1;
+  min-height: 38px; max-height: 120px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 9px 14px;
+  outline: none;
+  resize: none;
+  transition: var(--transition);
+  line-height: 1.5;
+}
+.chat-input:focus {
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 2px rgba(59,130,246,0.15);
+}
+.chat-send-btn {
+  width: 38px; height: 38px;
+  background: var(--cta); color: var(--cta-text);
+  border: none; border-radius: 50%;
+  cursor: pointer; transition: var(--transition);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+.chat-send-btn:hover { background: var(--cta-hover); }
+.chat-send-btn:disabled { background: var(--border); cursor: not-allowed; }
+
+/* Attachment chip */
+.attachment-chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  font-size: 11px;
+  margin: 4px 4px 0 0;
+}
+
+/* ============================================================
+   SETTINGS DIALOG (modal overlay)
+   ============================================================ */
+.settings-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.6);
+  z-index: 100;
+  align-items: center; justify-content: center;
+}
+.settings-overlay.open { display: flex; }
+
+.settings-dialog {
+  width: 640px; max-height: 80vh;
+  background: var(--bg-surface);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+  display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.settings-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.settings-title {
+  font-family: var(--font-mono);
+  font-weight: 600; font-size: 13px;
+}
+.settings-close {
+  width: 28px; height: 28px;
+  border: none; background: transparent;
+  color: var(--text-muted); font-size: 16px;
+  cursor: pointer; border-radius: var(--radius-sm);
+  transition: var(--transition);
+}
+.settings-close:hover { background: var(--bg-hover); color: var(--text-primary); }
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+}
+.settings-tab-item {
+  padding: 10px 16px;
+  font-size: 12px; font-weight: 500;
+  color: var(--text-muted);
+  cursor: pointer; border: none;
+  background: transparent;
+  border-bottom: 2px solid transparent;
+  transition: var(--transition);
+}
+.settings-tab-item.active {
+  color: var(--cta);
+  border-bottom-color: var(--cta);
+}
+.settings-body {
+  flex: 1; overflow-y: auto;
+  padding: 24px;
+}
+.settings-actions {
+  padding: 16px 24px;
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: flex-end; gap: 10px;
+}
+
+/* Vault key list */
+.vault-key-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 12px;
+  background: var(--bg-root);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  margin-bottom: 6px;
+}
+.vault-key-provider {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  padding: 2px 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+}
+.vault-key-alias {
+  flex: 1; font-size: 12px;
+}
+.vault-key-masked {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.vault-key-actions {
+  display: flex; gap: 4px;
+}
+.vault-key-btn {
+  width: 26px; height: 26px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer; transition: var(--transition);
+  font-size: 12px;
+}
+.vault-key-btn:hover { border-color: var(--border-light); color: var(--text-primary); }
+
+/* ============================================================
+   STATUS BAR
+   ============================================================ */
+.statusbar {
+  height: var(--statusbar-h);
+  background: var(--bg-surface);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 12px; gap: 16px;
+  font-size: 10.5px; color: var(--text-muted);
+}
+.statusbar-item {
+  display: flex; align-items: center; gap: 5px;
+}
+.status-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.status-dot.green { background: var(--cta); }
+.status-dot.amber { background: var(--accent-amber); }
+
+/* ============================================================
+   TOAST
+   ============================================================ */
+.toast {
+  position: fixed; bottom: 48px; right: 24px;
+  background: var(--bg-elevated);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 12px 18px;
+  font-size: 12px; color: var(--text-primary);
+  box-shadow: var(--shadow-md);
+  z-index: 200;
+  display: none;
+  animation: slideIn 200ms ease;
+}
+.toast.show { display: block; }
+.toast.success { border-color: var(--cta); }
+@keyframes slideIn {
+  from { opacity:0; transform:translateY(8px); }
+  to { opacity:1; transform:translateY(0); }
+}
+
+/* ============================================================
+   CREATE SESSION FORM
+   ============================================================ */
+.create-session-panel {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.session-create-form {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 32px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+.form-header {
+  margin-bottom: 32px;
+}
+.form-header-title {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-primary);
+}
+.form-header-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* Radio group */
+.radio-group {
+  display: flex; gap: 16px; margin-top: 8px;
+}
+.radio-option {
+  display: flex; align-items: center; gap: 6px; cursor: pointer;
+}
+.radio-option input[type="radio"] {
+  appearance: none; width: 16px; height: 16px;
+  border: 2px solid var(--border); border-radius: 50%;
+  background: transparent; cursor: pointer; position: relative;
+}
+.radio-option input[type="radio"]:checked { border-color: var(--cta); }
+.radio-option input[type="radio"]:checked::after {
+  content: ""; position: absolute; top: 3px; left: 3px;
+  width: 6px; height: 6px; background: var(--cta); border-radius: 50%;
+}
+.radio-label { font-size: 12px; color: var(--text-secondary); }
+
+/* Selection cards */
+.selection-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px; margin-top: 8px;
+}
+.selection-card {
+  background: var(--bg-elevated); border: 1px solid var(--border);
+  border-radius: var(--radius-md); padding: 12px;
+  cursor: pointer; transition: var(--transition); position: relative;
+}
+.selection-card:hover { border-color: var(--border-light); background: var(--bg-hover); }
+.selection-card.selected { border-color: var(--cta); background: rgba(34,197,94,0.05); }
+.selection-card-check {
+  position: absolute; top: 8px; right: 8px;
+  color: var(--cta); font-size: 14px; opacity: 0;
+}
+.selection-card.selected .selection-card-check { opacity: 1; }
+.selection-card-avatar {
+  width: 36px; height: 36px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-size: 12px; font-weight: 700;
+  margin-bottom: 8px;
+}
+.selection-card-name { font-weight: 500; font-size: 12.5px; margin-bottom: 2px; }
+.selection-card-meta { font-size: 11px; color: var(--text-muted); }
+
+/* Advanced toggle */
+.advanced-toggle {
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  margin-top: 16px; padding: 8px; border-radius: var(--radius-md);
+  background: transparent; border: none;
+  color: var(--text-muted); font-size: 11.5px; transition: var(--transition);
+}
+.advanced-toggle:hover { background: var(--bg-hover); color: var(--text-secondary); }
+.advanced-toggle-icon { font-size: 12px; transition: var(--transition); }
+.advanced-toggle.active .advanced-toggle-icon { transform: rotate(90deg); }
+.advanced-content {
+  max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+}
+.advanced-content.expanded { max-height: 600px; margin-top: 16px; }
+
+/* ============================================================
+   SCROLLBAR
+   ============================================================ */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ============================================================
+   FORM COMPONENTS
+   ============================================================ */
+.form-section {
+  margin-bottom: 24px;
+}
+.form-label {
+  font-size: 12.5px;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+}
+.form-label-sm {
+  font-size: 11.5px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+}
+.form-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  transition: var(--transition);
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--cta);
+  background: var(--bg-elevated);
+}
+.form-textarea {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  font-size: 12.5px;
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  resize: vertical;
+  min-height: 80px;
+  transition: var(--transition);
+}
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--cta);
+  background: var(--bg-elevated);
+}
+.form-row {
+  display: flex;
+  gap: 16px;
+}
+.form-col {
+  flex: 1;
+}
+.form-slider {
+  width: 100%;
+  height: 4px;
+  background: var(--border);
+  border-radius: 2px;
+  outline: none;
+  -webkit-appearance: none;
+}
+.form-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--cta);
+  cursor: pointer;
+}
+.checkbox-option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.checkbox-option input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+}
+.checkbox-option input[type="checkbox"]:checked {
+  background: var(--cta);
+  border-color: var(--cta);
+}
+.checkbox-option input[type="checkbox"]:checked::after {
+  content: "✓";
+  position: absolute;
+  top: 0;
+  left: 2px;
+  color: white;
+  font-size: 10px;
+}
+.form-action-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border);
+}
+
+/* ============================================================
+   RESPONSIVE HINTS
+   ============================================================ */
+@media (max-width: 768px) {
+  .sidebar { width: 60px; }
+  .sidebar-tab { font-size: 0; }
+  .sidebar-tab-icon { font-size: 16px; }
+  .agent-list-panel, .team-list-panel, .session-list-panel { width: 200px; }
+  .session-create-form { padding: 16px; }
+  .form-row { flex-direction: column; gap: 12px; }
+}
+
+/* ============================================================
+   DEMO-ONLY: Nav tab switching logic
+   ============================================================ */
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ TITLE BAR ============ -->
+  <div class="titlebar">
+    <span class="titlebar-logo">ACTs</span>
+    <span class="titlebar-version">v0.1.0-dev</span>
+    <span style="font-size:11px;color:var(--text-muted);">Agent Creat Tools</span>
+    <span class="titlebar-spacer"></span>
+    <div class="titlebar-actions">
+      <button class="titlebar-btn" onclick="openSettings()" title="Settings">⚙</button>
+      <button class="titlebar-btn" title="Minimize">─</button>
+      <button class="titlebar-btn" title="Maximize">□</button>
+      <button class="titlebar-btn" title="Close" style="color:var(--accent-red)">✕</button>
+    </div>
+  </div>
+
+  <!-- ============ MAIN BODY ============ -->
+  <div class="main-body">
+
+    <!-- ---- SIDEBAR ---- -->
+    <div class="sidebar">
+      <div class="sidebar-tabs">
+        <button class="sidebar-tab active" onclick="switchTab('agents')" data-tab="agents">
+          <span class="sidebar-tab-icon">🤖</span> Agents
+        </button>
+        <button class="sidebar-tab" onclick="switchTab('teams')" data-tab="teams">
+          <span class="sidebar-tab-icon">👥</span> Teams
+        </button>
+        <button class="sidebar-tab" onclick="switchTab('sessions')" data-tab="sessions">
+          <span class="sidebar-tab-icon">💬</span> Sessions
+        </button>
+      </div>
+
+      <div class="sidebar-content" id="sidebarAgentList">
+        <!-- AGENT SIDEBAR -->
+        <ul class="sidebar-list">
+          <li class="sidebar-item active" onclick="selectAgent(this, 'code-helper')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-blue);color:#fff;">C</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">代码助手</div>
+              <div class="sidebar-item-meta">gpt-4o</div>
+            </div>
+          </li>
+          <li class="sidebar-item" onclick="selectAgent(this, 'writer')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-purple);color:#fff;">W</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">文案撰写</div>
+              <div class="sidebar-item-meta">claude-3.5</div>
+            </div>
+          </li>
+          <li class="sidebar-item" onclick="selectAgent(this, 'reviewer')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-cyan);color:#0F172A;">R</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">审校专家</div>
+              <div class="sidebar-item-meta">gemini-2.5</div>
+            </div>
+          </li>
+          <li class="sidebar-item" onclick="selectAgent(this, 'translator')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-amber);color:#0F172A;">T</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">翻译助手</div>
+              <div class="sidebar-item-meta">deepseek-v3</div>
+            </div>
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <button class="sidebar-add-btn" onclick="showToast('创建新 Agent')">+ New Agent</button>
+        </div>
+      </div>
+
+      <div class="sidebar-content" id="sidebarTeamList" style="display:none;">
+        <!-- TEAM SIDEBAR -->
+        <ul class="sidebar-list">
+          <li class="sidebar-item active" onclick="selectTeamItem(this,'content-team')">
+            <div class="sidebar-item-avatar" style="background:var(--cta);color:#052E16;">CT</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">内容创作团队</div>
+              <div class="sidebar-item-meta">3 名成员</div>
+            </div>
+            <span class="sidebar-item-badge" style="background:rgba(34,197,94,0.15);color:var(--cta);">active</span>
+          </li>
+          <li class="sidebar-item" onclick="selectTeamItem(this,'dev-team')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-blue);color:#fff;">DT</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">开发冲刺团队</div>
+              <div class="sidebar-item-meta">2 名成员</div>
+            </div>
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <button class="sidebar-add-btn" onclick="showToast('创建新 Team')">+ New Team</button>
+        </div>
+      </div>
+
+      <div class="sidebar-content" id="sidebarSessionList" style="display:none;">
+        <!-- SESSION SIDEBAR (placeholder, sessions handled in session panel) -->
+        <ul class="sidebar-list">
+          <li class="sidebar-item" onclick="switchToSessionTab('sessions')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-pink);color:#fff;">PR</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">产品需求文档</div>
+              <div class="sidebar-item-meta">Content Team</div>
+            </div>
+            <span class="sidebar-item-badge" style="background:rgba(239,68,68,0.15);color:var(--accent-red);">6</span>
+          </li>
+          <li class="sidebar-item" onclick="switchToSessionTab('sessions')">
+            <div class="sidebar-item-avatar" style="background:var(--accent-blue);color:#fff;">CD</div>
+            <div class="sidebar-item-info">
+              <div class="sidebar-item-name">代码审查</div>
+              <div class="sidebar-item-meta">Code Agent</div>
+            </div>
+            <span class="sidebar-item-badge" style="background:rgba(34,197,94,0.15);color:var(--cta);">12</span>
+          </li>
+        </ul>
+        <div class="sidebar-footer">
+          <button class="sidebar-add-btn" onclick="showToast('创建新 Session')">+ New Session</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- CONTENT AREA ---- -->
+    <div class="content">
+
+      <!-- ============ AGENT PANEL ============ -->
+      <div class="panel active" id="panel-agents">
+        <div class="agent-panel">
+
+          <!-- Agent Detail Form -->
+          <div class="agent-detail" id="agent-detail-form">
+            <div class="form-section">
+              <div class="form-section-title">Basic Info</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <span class="form-label form-label-required">Name</span>
+                  <input class="form-input" value="代码助手" placeholder="Agent display name">
+                </div>
+                <div class="form-group">
+                  <span class="form-label">Agent ID</span>
+                  <input class="form-input" value="a1b2c3d4" disabled style="color:var(--text-disabled);">
+                </div>
+              </div>
+              <div class="form-group full" style="margin-bottom:14px;">
+                <span class="form-label">Description</span>
+                <input class="form-input" value="擅长 Python 和 JavaScript 的编程助手，支持代码生成、调试和审查" placeholder="Brief description of this agent">
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">System Prompt</div>
+              <textarea class="form-textarea" placeholder="Define the agent's system prompt...">你是一个专业的编程助手，精通 Python、JavaScript、TypeScript。
+在回答代码问题时：
+1. 先理解用户的需求和上下文
+2. 给出清晰的代码示例
+3. 解释关键逻辑
+4. 指出潜在的性能或安全问题</textarea>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">LLM Configuration</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <span class="form-label form-label-required">Provider</span>
+                  <select class="form-select">
+                    <option>OpenAI</option>
+                    <option>Anthropic</option>
+                    <option>Google</option>
+                    <option>OpenAI Compatible (DeepSeek / Qwen / GLM / ...)</option>
+                    <option>Custom</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <span class="form-label form-label-required">Model</span>
+                  <select class="form-select">
+                    <option>gpt-4o</option>
+                    <option>gpt-4-turbo</option>
+                    <option>gpt-3.5-turbo</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <span class="form-label">API Key</span>
+                  <select class="form-select">
+                    <option>vault:openai_main</option>
+                    <option>vault:openai_backup</option>
+                    <option>+ Add new key...</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <span class="form-label">Base URL</span>
+                  <input class="form-input" value="https://api.openai.com/v1" placeholder="https://api.openai.com/v1">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <span class="form-label">
+                    Temperature <span style="color:var(--text-disabled);">(0–2.0)</span>
+                  </span>
+                  <div class="form-slider-row">
+                    <input type="range" class="form-slider" min="0" max="2" step="0.1" value="0.7">
+                    <span class="form-slider-value">0.7</span>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <span class="form-label">Max Tokens</span>
+                  <input class="form-input" value="4096" type="number">
+                </div>
+                <div class="form-group">
+                  <span class="form-label">Timeout (s)</span>
+                  <input class="form-input" value="120" type="number">
+                </div>
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">Skills</div>
+              <div class="skills-list">
+                <span class="skill-tag">
+                  code_review
+                  <span class="skill-tag-remove">×</span>
+                </span>
+                <span class="skill-tag">
+                  debug_helper
+                  <span class="skill-tag-remove">×</span>
+                </span>
+                <button class="skill-add-btn">+ Add Skill</button>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button class="btn btn-danger">Delete Agent</button>
+              <button class="btn btn-secondary">Reset</button>
+              <button class="btn btn-primary" onclick="showToast('Agent saved','success')">Save Agent</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ TEAM PANEL ============ -->
+      <div class="panel" id="panel-teams">
+        <div class="team-panel">
+
+          <!-- Team Detail -->
+          <div class="team-detail" id="team-detail-form">
+            <div class="form-section">
+              <div class="form-section-title">Basic Info</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <span class="form-label form-label-required">Team Name</span>
+                  <input class="form-input" value="内容创作团队">
+                </div>
+                <div class="form-group">
+                  <span class="form-label">Team ID</span>
+                  <input class="form-input" value="t1e5f6a7" disabled style="color:var(--text-disabled);">
+                </div>
+              </div>
+              <div class="form-group full">
+                <span class="form-label">Description</span>
+                <input class="form-input" value="从选题到最终发布的完整内容创作流程，包括文案撰写和审校润色">
+              </div>
+            </div>
+
+            <div class="form-section">
+              <div class="form-section-title">Members</div>
+              <div class="member-composer">
+                <div class="member-composer-header">
+                  DRAG TO REORDER · CLICK TO SET CAPTAIN
+                </div>
+                <div class="member-row captain">
+                  <span class="member-row-crown" title="Captain">♛</span>
+                  <span class="member-row-drag">⋮⋮</span>
+                  <div class="member-row-avatar" style="background:var(--accent-blue);color:#fff;">C</div>
+                  <div class="member-row-info">
+                    <div class="member-row-name">代码助手</div>
+                    <div class="member-row-role">队长 — 任务分析与分派</div>
+                  </div>
+                  <span class="member-row-badge">Captain</span>
+                </div>
+                <div class="member-row">
+                  <span class="member-row-drag">⋮⋮</span>
+                  <div class="member-row-avatar" style="background:var(--accent-purple);color:#fff;">W</div>
+                  <div class="member-row-info">
+                    <div class="member-row-name">文案撰写</div>
+                    <div class="member-row-role">内容撰写</div>
+                  </div>
+                </div>
+                <div class="member-row">
+                  <span class="member-row-drag">⋮⋮</span>
+                  <div class="member-row-avatar" style="background:var(--accent-cyan);color:#0F172A;">R</div>
+                  <div class="member-row-info">
+                    <div class="member-row-name">审校专家</div>
+                    <div class="member-row-role">审校润色</div>
+                  </div>
+                </div>
+                <button class="member-add-btn">+ Add Agent to Team</button>
+              </div>
+            </div>
+
+            <div class="action-bar">
+              <button class="btn btn-danger">Delete Team</button>
+              <button class="btn btn-secondary">Reset</button>
+              <button class="btn btn-primary" onclick="showToast('Team saved','success')">Save Team</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ============ SESSION PANEL ============ -->
+      <div class="panel" id="panel-sessions">
+        <div class="session-panel">
+
+          <!-- Chat Area -->
+          <div class="chat-area">
+            <div class="chat-header">
+              <span class="chat-header-target">产品需求文档撰写</span>
+              <span class="chat-header-badge">Content Team</span>
+              <span style="flex:1;"></span>
+              <span style="font-size:11px;color:var(--text-muted);">a1b2c3d4 + 2 members</span>
+            </div>
+
+            <div class="chat-messages">
+              <!-- User message -->
+              <div class="msg-row user">
+                <div class="msg-avatar" style="background:var(--accent-pink);color:#fff;">U</div>
+                <div>
+                  <div class="msg-bubble">请帮我写一份智能音箱的产品需求文档，目标用户是家庭用户，重点覆盖语音交互和智能家居控制场景。</div>
+                  <div class="msg-time">11:00:12</div>
+                </div>
+              </div>
+
+              <!-- Orchestrator log -->
+              <div class="msg-row system">
+                <div class="msg-bubble">
+                  <div class="orchestrator-log">
+                    <div class="orchestrator-log-line">
+                      <span class="orchestrator-log-arrow">→</span>
+                      <span>队长 [代码助手] 正在分析任务...</span>
+                    </div>
+                    <div class="orchestrator-log-line">
+                      <span class="orchestrator-log-arrow">→</span>
+                      <span class="orchestrator-log-agent">[文案撰写]</span>
+                      <span>撰写 PRD 功能需求部分</span>
+                    </div>
+                    <div class="orchestrator-log-line">
+                      <span class="orchestrator-log-arrow">→</span>
+                      <span class="orchestrator-log-agent">[审校专家]</span>
+                      <span>完成后续审校润色</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Agent response -->
+              <div class="msg-row assistant">
+                <div class="msg-avatar" style="background:var(--accent-purple);color:#fff;">W</div>
+                <div>
+                  <div class="msg-bubble">
+                    <strong>智能音箱产品需求文档 (PRD)</strong><br><br>
+                    <strong>1. 语音交互模块</strong><br>
+                    · 远场语音唤醒（3-5米）<br>
+                    · 多轮对话上下文保持<br>
+                    · 方言识别支持（粤语、四川话）<br>
+                    · 声纹识别区分家庭成员<br><br>
+                    <strong>2. 智能家居控制</strong><br>
+                    · 支持 Zigbee / Wi-Fi / BLE Mesh 协议<br>
+                    · 预置 50+ 品牌设备驱动<br>
+                    · 场景联动（离家模式、观影模式）<br>
+                    · 定时任务与自动化规则引擎</div>
+                  <div class="msg-time">11:03:20</div>
+                </div>
+              </div>
+
+              <!-- Reviewer response -->
+              <div class="msg-row assistant">
+                <div class="msg-avatar" style="background:var(--accent-cyan);color:#0F172A;">R</div>
+                <div>
+                  <div class="msg-bubble">
+                    审校完成：已修正 3 处表达，补充了竞品分析章节。<br>
+                    文档结构已优化为：概述 → 用户画像 → 功能需求 → 非功能需求 → 竞品分析 → 里程碑。
+                  </div>
+                  <div class="msg-time">11:05:00</div>
+                </div>
+              </div>
+
+              <!-- Streaming effect demo -->
+              <div class="msg-row assistant">
+                <div class="msg-avatar" style="background:var(--cta);color:#052E16;">CT</div>
+                <div>
+                  <div class="msg-bubble stream-cursor">
+                    Team 任务已完成。最终文档已保存至 Session 文件目录，包含完整的功能需求、用户画像、竞品分析和开发里程碑...
+                  </div>
+                  <div class="msg-time">11:05:42</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Input bar -->
+            <div class="chat-input-bar">
+              <textarea class="chat-input" rows="1" placeholder="输入消息... (支持 @Agent 指定成员)" 
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();showToast('Message sent','success');this.value='';}"></textarea>
+              <button class="chat-send-btn" title="Send" onclick="showToast('Message sent','success')">↑</button>
+            </div>
+          </div>
+
+          <!-- Create Session Panel -->
+          <div class="create-session-panel" id="create-session-panel" style="display:none;">
+            <div class="session-create-form">
+              <div class="form-header">
+                <div class="form-header-title">Create New Session</div>
+                <div class="form-header-subtitle">Configure a new session for your team. Select agents, set parameters, and define the workflow.</div>
+              </div>
+
+              <!-- Basic Info -->
+              <div class="form-section">
+                <div class="form-label">Session Name</div>
+                <input type="text" class="form-input" placeholder="e.g., Product Requirements Document" value="Product Requirements Document">
+                <div class="form-hint">A descriptive name for this session</div>
+              </div>
+
+              <div class="form-section">
+                <div class="form-label">Session Type</div>
+                <div class="radio-group">
+                  <label class="radio-option">
+                    <input type="radio" name="session-type" checked>
+                    <span class="radio-label">Team Session</span>
+                  </label>
+                  <label class="radio-option">
+                    <input type="radio" name="session-type">
+                    <span class="radio-label">Single Agent</span>
+                  </label>
+                </div>
+              </div>
+
+              <!-- Agent/Team Selection -->
+              <div class="form-section">
+                <div class="form-label">Select Team</div>
+                <div class="selection-cards">
+                  <div class="selection-card selected" onclick="toggleSelection(this)">
+                    <div class="selection-card-avatar" style="background:var(--accent-purple);">CT</div>
+                    <div class="selection-card-name">Content Team</div>
+                    <div class="selection-card-meta">3 agents, 2 skills</div>
+                    <div class="selection-card-check">✓</div>
+                  </div>
+                  <div class="selection-card" onclick="toggleSelection(this)">
+                    <div class="selection-card-avatar" style="background:var(--accent-amber);">DT</div>
+                    <div class="selection-card-name">Dev Team</div>
+                    <div class="selection-card-meta">4 agents, 5 skills</div>
+                    <div class="selection-card-check">✓</div>
+                  </div>
+                  <div class="selection-card" onclick="toggleSelection(this)">
+                    <div class="selection-card-avatar" style="background:var(--accent-cyan);">RT</div>
+                    <div class="selection-card-name">Research Team</div>
+                    <div class="selection-card-meta">2 agents, 3 skills</div>
+                    <div class="selection-card-check">✓</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Session Parameters -->
+              <div class="form-section">
+                <div class="form-label">Session Parameters</div>
+                <div class="form-row">
+                  <div class="form-col">
+                    <div class="form-label-sm">Temperature</div>
+                    <input type="range" min="0" max="1" step="0.1" value="0.7" class="form-slider" oninput="updateSliderValue(this, 'temp-value')">
+                    <div class="form-hint" id="temp-value">0.7</div>
+                  </div>
+                  <div class="form-col">
+                    <div class="form-label-sm">Max Tokens</div>
+                    <input type="number" class="form-input" value="4000">
+                    <div class="form-hint">Maximum response length</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Advanced Options -->
+              <button class="advanced-toggle" onclick="toggleAdvanced(this)">
+                <span class="advanced-toggle-icon">▶</span>
+                <span>Advanced Options</span>
+              </button>
+              <div class="advanced-content" id="advanced-content">
+                <div class="form-section">
+                  <div class="form-label">System Prompt</div>
+                  <textarea class="form-textarea" rows="4" placeholder="Optional custom system prompt...">You are a professional product manager. Write clear, structured product requirements documents with user stories, acceptance criteria, and technical specifications.</textarea>
+                </div>
+                <div class="form-section">
+                  <div class="form-label">Memory Context</div>
+                  <div class="form-row">
+                    <div class="form-col">
+                      <label class="checkbox-option">
+                        <input type="checkbox" checked>
+                        <span class="checkbox-label">Enable session memory</span>
+                      </label>
+                    </div>
+                    <div class="form-col">
+                      <label class="checkbox-option">
+                        <input type="checkbox">
+                        <span class="checkbox-label">Persist across sessions</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action Buttons -->
+              <div class="form-action-bar">
+                <button class="btn btn-secondary" onclick="showPanel('panel-sessions')">Cancel</button>
+                <button class="btn btn-primary" onclick="createSession()">Create Session</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /.content -->
+  </div><!-- /.main-body -->
+
+  <!-- ============ STATUS BAR ============ -->
+  <div class="statusbar">
+    <span class="statusbar-item">
+      <span class="status-dot green"></span>
+      Ready
+    </span>
+    <span class="statusbar-item">Data: E:\Acts\</span>
+    <span class="statusbar-item">Agents: 4</span>
+    <span class="statusbar-item">Teams: 2</span>
+    <span class="statusbar-item">LLM: OpenAI (gpt-4o)</span>
+  </div>
+
+</div><!-- /.app -->
+
+<!-- ============ SETTINGS DIALOG ============ -->
+<div class="settings-overlay" id="settingsOverlay">
+  <div class="settings-dialog">
+    <div class="settings-header">
+      <span class="settings-title">Settings</span>
+      <button class="settings-close" onclick="closeSettings()">✕</button>
+    </div>
+    <div class="settings-tabs">
+      <button class="settings-tab-item active" onclick="switchSettingsTab(this,'general')">General</button>
+      <button class="settings-tab-item" onclick="switchSettingsTab(this,'vault')">Key Vault</button>
+      <button class="settings-tab-item" onclick="switchSettingsTab(this,'advanced')">Advanced</button>
+    </div>
+    <div class="settings-body" id="settingsGeneral">
+      <div class="form-section">
+        <div class="form-section-title">Data Directory</div>
+        <div class="form-row">
+          <div class="form-group full">
+            <input class="form-input" value="E:\Acts\" placeholder="Select data directory...">
+            <span class="form-hint">All agent configs, team definitions, and session data are stored here.</span>
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">Appearance</div>
+        <div class="form-row">
+          <div class="form-group">
+            <span class="form-label">Theme</span>
+            <select class="form-select">
+              <option>Dark (Default)</option>
+              <option>Light</option>
+              <option>System</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <span class="form-label">Font Size</span>
+            <select class="form-select">
+              <option>13px (Default)</option>
+              <option>12px</option>
+              <option>14px</option>
+              <option>16px</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-body" id="settingsVault" style="display:none;">
+      <div class="form-section">
+        <div class="form-section-title">API Key Management</div>
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
+          Keys are encrypted with AES-256-GCM and stored in the system credential manager.
+        </p>
+        <div class="vault-key-row">
+          <span class="vault-key-provider">OpenAI</span>
+          <span class="vault-key-alias">openai_main</span>
+          <span class="vault-key-masked">sk-****...****a8f2</span>
+          <div class="vault-key-actions">
+            <button class="vault-key-btn" title="Copy">📋</button>
+            <button class="vault-key-btn" title="Edit">✎</button>
+            <button class="vault-key-btn" title="Delete" style="color:var(--accent-red);">🗑</button>
+          </div>
+        </div>
+        <div class="vault-key-row">
+          <span class="vault-key-provider">Anthropic</span>
+          <span class="vault-key-alias">claude_prod</span>
+          <span class="vault-key-masked">sk-ant-****...****c3d1</span>
+          <div class="vault-key-actions">
+            <button class="vault-key-btn" title="Copy">📋</button>
+            <button class="vault-key-btn" title="Edit">✎</button>
+            <button class="vault-key-btn" title="Delete" style="color:var(--accent-red);">🗑</button>
+          </div>
+        </div>
+        <div class="vault-key-row">
+          <span class="vault-key-provider">Google</span>
+          <span class="vault-key-alias">gemini_dev</span>
+          <span class="vault-key-masked">AIza****...****7b9e</span>
+          <div class="vault-key-actions">
+            <button class="vault-key-btn" title="Copy">📋</button>
+            <button class="vault-key-btn" title="Edit">✎</button>
+            <button class="vault-key-btn" title="Delete" style="color:var(--accent-red);">🗑</button>
+          </div>
+        </div>
+        <button class="sidebar-add-btn" style="margin-top:12px;width:auto;padding:0 16px;" onclick="showToast('添加新密钥')">+ Add API Key</button>
+      </div>
+    </div>
+
+    <div class="settings-body" id="settingsAdvanced" style="display:none;">
+      <div class="form-section">
+        <div class="form-section-title">LLM Defaults</div>
+        <div class="form-row">
+          <div class="form-group">
+            <span class="form-label">Default Timeout (s)</span>
+            <input class="form-input" value="120" type="number">
+          </div>
+          <div class="form-group">
+            <span class="form-label">Max Retries</span>
+            <input class="form-input" value="2" type="number">
+          </div>
+        </div>
+      </div>
+      <div class="form-section">
+        <div class="form-section-title">Session</div>
+        <div class="form-row">
+          <div class="form-group">
+            <span class="form-label">Max Context Messages</span>
+            <input class="form-input" value="50" type="number">
+          </div>
+          <div class="form-group">
+            <span class="form-label">Auto-save Interval (s)</span>
+            <input class="form-input" value="30" type="number">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-actions">
+      <button class="btn btn-secondary" onclick="closeSettings()">Cancel</button>
+      <button class="btn btn-primary" onclick="showToast('Settings saved','success');closeSettings();">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ TOAST ============ -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================================
+     INTERACTION SCRIPT
+     Maps to PyQt6 signal/slot patterns
+     ============================================================ -->
+<script>
+// ---- Tab Switching ----
+function switchTab(tab) {
+  document.querySelectorAll('.sidebar-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + tab).classList.add('active');
+
+  // Show/hide sidebar lists
+  document.getElementById('sidebarAgentList').style.display = tab === 'agents' ? '' : 'none';
+  document.getElementById('sidebarTeamList').style.display = tab === 'teams' ? '' : 'none';
+  document.getElementById('sidebarSessionList').style.display = tab === 'sessions' ? '' : 'none';
+}
+
+// ---- Agent Selection ----
+function selectAgent(el, id) {
+  document.querySelectorAll('#panel-agents .sidebar-item, #sidebarAgentList .sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// ---- Team Selection ----
+function selectTeam(el, id) {
+  document.querySelectorAll('#panel-teams .sidebar-item, #sidebarTeamList .sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function selectTeamItem(el, id) {
+  document.querySelectorAll('#sidebarTeamList .sidebar-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+  switchTab('teams');
+}
+
+// ---- Session Selection ----
+function selectSession(el) {
+  document.querySelectorAll('.session-item').forEach(i => i.classList.remove('active'));
+  el.classList.add('active');
+}
+
+function switchToSessionTab(tab) {
+  switchTab('sessions');
+}
+
+// ---- Settings ----
+function openSettings() {
+  document.getElementById('settingsOverlay').classList.add('open');
+}
+function closeSettings() {
+  document.getElementById('settingsOverlay').classList.remove('open');
+}
+function switchSettingsTab(el, tab) {
+  document.querySelectorAll('.settings-tab-item').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('settingsGeneral').style.display = tab === 'general' ? '' : 'none';
+  document.getElementById('settingsVault').style.display = tab === 'vault' ? '' : 'none';
+  document.getElementById('settingsAdvanced').style.display = tab === 'advanced' ? '' : 'none';
+}
+
+// ---- Toast ----
+function showToast(msg, type) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show' + (type ? ' ' + type : '');
+  clearTimeout(t._timeout);
+  t._timeout = setTimeout(function(){ t.classList.remove('show'); }, 2000);
+}
+
+// ---- Close settings on overlay click ----
+document.getElementById('settingsOverlay').addEventListener('click', function(e) {
+  if (e.target === this) closeSettings();
+});
+
+// ---- Esc to close settings ----
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('settingsOverlay').classList.contains('open')) {
+    closeSettings();
+  }
+});
+
+// ---- Create Session Panel ----
+function openCreateSession() {
+  var panel = document.getElementById('panel-sessions');
+  var chat = panel.querySelector('.chat-area');
+  var form = document.getElementById('create-session-panel');
+  switchTab('sessions');
+  if (chat) chat.style.display = 'none';
+  if (form) form.style.display = 'flex';
+}
+
+function showPanel(id) {
+  var panel = document.getElementById(id);
+  var chat = panel.querySelector('.chat-area');
+  var form = panel.querySelector('#create-session-panel');
+  if (chat) chat.style.display = '';
+  if (form) form.style.display = 'none';
+}
+
+function toggleSelection(card) {
+  card.classList.toggle('selected');
+}
+
+function toggleAdvanced(btn) {
+  btn.classList.toggle('active');
+  document.getElementById('advanced-content').classList.toggle('expanded');
+}
+
+function updateSliderValue(slider, targetId) {
+  document.getElementById(targetId).textContent = slider.value;
+}
+
+function createSession() {
+  var name = document.querySelector('.session-create-form .form-input').value || 'Untitled';
+  showToast('Session "' + name + '" created', 'success');
+  showPanel('panel-sessions');
+}
+
+// ---- Attach new session btn click ----
+document.addEventListener('DOMContentLoaded', function() {
+  var newSessionBtn = document.querySelector('.session-item.add-new');
+  if (newSessionBtn) {
+    newSessionBtn.onclick = openCreateSession;
+  }
+});
+</script>
+
+</body>
+</html>
