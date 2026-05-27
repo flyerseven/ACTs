@@ -6,6 +6,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
     QFormLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -34,18 +35,32 @@ class SessionCreateWidget(QWidget):
         super().__init__()
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(12)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(0)
 
-        header = QLabel("Create New Session")
-        header.setStyleSheet("font-size: 14px; font-weight: 600;")
-        layout.addWidget(header)
+        # Page header
+        title = QLabel("Create New Session")
+        title.setStyleSheet("font-size: 17px; font-weight: 700; color: #f8fafc;")
+        layout.addWidget(title)
+
+        subtitle = QLabel("Start a new conversation with an AI agent.")
+        subtitle.setStyleSheet("color: #64748b; font-size: 11.5px; margin-top: 2px; margin-bottom: 20px;")
+        layout.addWidget(subtitle)
+
+        # Settings card
+        card = QFrame()
+        card.setObjectName("card")
+        card.setStyleSheet("QFrame#card { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 0; }")
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(0)
 
         form = QFormLayout()
         form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
+        form.setVerticalSpacing(12)
 
         self.name_input = QLineEdit()
-        self.name_input.setPlaceholderText("Session name")
+        self.name_input.setPlaceholderText("My Session")
 
         self.agent_combo = QComboBox()
 
@@ -58,27 +73,41 @@ class SessionCreateWidget(QWidget):
         self.compress_every_input.setValue(10)
 
         self.system_prompt_input = QTextEdit()
-        self.system_prompt_input.setPlaceholderText("Optional system prompt override")
-        self.system_prompt_input.setFixedHeight(110)
+        self.system_prompt_input.setPlaceholderText("Optional system prompt override...")
+        self.system_prompt_input.setFixedHeight(100)
 
-        form.addRow("Session Name", self.name_input)
-        form.addRow("Agent", self.agent_combo)
-        form.addRow("Context Window (messages)", self.context_window_input)
-        form.addRow("Compress Every N Turns (0=off)", self.compress_every_input)
-        form.addRow("System Prompt", self.system_prompt_input)
+        form.addRow(self._fl("Session Name"), self.name_input)
+        form.addRow(self._fl("Agent"), self.agent_combo)
+        form.addRow(self._fl("Context Window"), self.context_window_input)
+        form.addRow(self._fl("Compress Every N"), self.compress_every_input)
+        form.addRow(self._fl("System Prompt"), self.system_prompt_input)
 
-        layout.addLayout(form)
+        card_layout.addLayout(form)
+        layout.addWidget(card)
 
+        # Actions
+        layout.addSpacing(20)
         action_row = QHBoxLayout()
-        action_row.addStretch(1)
+        action_row.setSpacing(8)
         self.cancel_button = QPushButton("Cancel")
-        self.create_button = QPushButton("Create")
+        self.cancel_button.setProperty("cssClass", "ghost")
+        self.create_button = QPushButton("Create Session")
+        self.create_button.setProperty("cssClass", "primary")
         action_row.addWidget(self.cancel_button)
+        action_row.addStretch(1)
         action_row.addWidget(self.create_button)
         layout.addLayout(action_row)
 
+        layout.addStretch(1)
+
         self.create_button.clicked.connect(self._on_create)
         self.cancel_button.clicked.connect(self.cancel_requested.emit)
+
+    @staticmethod
+    def _fl(text: str) -> QLabel:
+        label = QLabel(text)
+        label.setStyleSheet("color: #94a3b8; font-size: 11.5px; min-width: 120px;")
+        return label
 
     def set_agents(self, agents: list[tuple[str, str]]) -> None:
         self.agent_combo.clear()

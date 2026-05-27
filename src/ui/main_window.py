@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
     QFrame,
@@ -23,7 +24,7 @@ from ui.session_panel import SessionPanel
 from core.models import agent_config_from_dict, session_meta_from_dict
 from storage.file_store import FileStore
 from security.vault import Vault
-from storage.yaml_io import read_yaml
+from storage.yaml_io import read_yaml, write_yaml
 
 if TYPE_CHECKING:
     from core.token_tracker import TokenTracker
@@ -36,21 +37,21 @@ class MainWindow(QMainWindow):
         self.vault = vault
         self.token_tracker = token_tracker
         self.setWindowTitle(f"ACTs {version}")
-        self.resize(1100, 720)
+        self.resize(1160, 760)
+        self.setMinimumSize(800, 500)
 
         wrapper = QWidget()
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.setSpacing(0)
 
-        title_bar = self._build_title_bar(version)
-        wrapper_layout.addWidget(title_bar)
+        wrapper_layout.addWidget(self._build_title_bar(version))
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
+        splitter.setHandleWidth(1)
 
-        sidebar = self._build_sidebar()
-        splitter.addWidget(sidebar)
+        splitter.addWidget(self._build_sidebar())
 
         self.stack = QStackedWidget()
         self.agent_panel = AgentPanel(store=store, vault=vault, show_list=False)
@@ -61,7 +62,9 @@ class MainWindow(QMainWindow):
         self.stack.addWidget(self.session_panel)
         splitter.addWidget(self.stack)
 
+        splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
+        splitter.setSizes([240, 920])
 
         wrapper_layout.addWidget(splitter)
         self.setCentralWidget(wrapper)
@@ -73,47 +76,78 @@ class MainWindow(QMainWindow):
         self.refresh_agent_list()
         self.refresh_session_list()
 
+    # ── Title bar ───────────────────────────────────────────────────────
+
     def _build_title_bar(self, version: str) -> QWidget:
         bar = QFrame()
-        bar.setFixedHeight(40)
+        bar.setObjectName("titleBar")
+        bar.setFixedHeight(44)
         layout = QHBoxLayout(bar)
-        layout.setContentsMargins(12, 0, 12, 0)
-        layout.setSpacing(8)
+        layout.setContentsMargins(16, 0, 16, 0)
+        layout.setSpacing(10)
+
+        # Logo mark — a small colored square
+        logo = QLabel()
+        logo.setFixedSize(18, 18)
+        logo.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #8b5cf6);"
+            "border-radius: 4px;"
+        )
+        layout.addWidget(logo)
 
         title = QLabel("ACTs")
         title.setObjectName("titleLabel")
-        version_label = QLabel(f"v{version}")
-        version_label.setStyleSheet("color: #94a3b8; font-size: 10px;")
-
         layout.addWidget(title)
+
+        version_label = QLabel(f"v{version}")
+        version_label.setObjectName("subtitleLabel")
         layout.addWidget(version_label)
+
         layout.addStretch(1)
+
         return bar
+
+    # ── Sidebar ─────────────────────────────────────────────────────────
 
     def _build_sidebar(self) -> QWidget:
         sidebar = QWidget()
-        sidebar.setMaximumWidth(240)
-        layout = QVBoxLayout(sidebar)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
+        sidebar.setMinimumWidth(220)
+        sidebar.setMaximumWidth(280)
+        sidebar.setStyleSheet("QWidget { background-color: #0b1120; }")
 
-        tab_row = QHBoxLayout()
-        tab_row.setSpacing(4)
+        layout = QVBoxLayout(sidebar)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(10)
+
+        # Tab toggle row — pill-style segmented control look
+        tab_container = QWidget()
+        tab_container.setFixedHeight(36)
+        tab_container.setStyleSheet(
+            "QWidget { background-color: #0f172a; border-radius: 10px; }"
+        )
+        tab_row = QHBoxLayout(tab_container)
+        tab_row.setContentsMargins(3, 3, 3, 3)
+        tab_row.setSpacing(2)
+
         self.tab_group = QButtonGroup(self)
         self.tab_group.setExclusive(True)
 
         self.tab_agents = QPushButton("Agents")
         self.tab_teams = QPushButton("Teams")
         self.tab_sessions = QPushButton("Sessions")
+
         for index, button in enumerate([self.tab_agents, self.tab_teams, self.tab_sessions]):
             button.setCheckable(True)
             button.setAutoExclusive(True)
+            button.setFixedHeight(30)
             self.tab_group.addButton(button, index)
             tab_row.addWidget(button)
 
-        layout.addLayout(tab_row)
+        layout.addWidget(tab_container)
 
+        # Stacked list panels per tab
         self.sidebar_stack = QStackedWidget()
+
         self.agent_list = QListWidget()
         self.agent_list.setWordWrap(True)
         self.agent_add_button = QPushButton("+ New Agent")
@@ -122,6 +156,7 @@ class MainWindow(QMainWindow):
         self.team_list = QListWidget()
         self.team_list.setWordWrap(True)
         self.team_add_button = QPushButton("+ New Team")
+        self.team_add_button.setEnabled(False)
         self.sidebar_stack.addWidget(self._build_list_panel(self.team_list, self.team_add_button))
 
         self.session_list = QListWidget()
@@ -148,6 +183,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(add_button)
         return panel
 
+    # ── Tab navigation ──────────────────────────────────────────────────
+
     def _set_active_tab(self, index: int) -> None:
         self.sidebar_stack.setCurrentIndex(index)
         self.stack.setCurrentIndex(index)
@@ -157,6 +194,8 @@ class MainWindow(QMainWindow):
             self.tab_teams.setChecked(True)
         else:
             self.tab_sessions.setChecked(True)
+
+    # ── List refresh ────────────────────────────────────────────────────
 
     def refresh_agent_list(self, select_id: str | None = None) -> None:
         current_id = select_id
@@ -174,9 +213,12 @@ class MainWindow(QMainWindow):
 
         for agent_id in agent_ids:
             config = agent_config_from_dict(read_yaml(self.store.agent_yaml_path(agent_id)))
-            text = f"{config.name}\n{config.model.name}"
-            item = QListWidgetItem(text)
+            item = QListWidgetItem()
+            item.setText(f"{config.name}\n  {config.model.name}")
             item.setData(Qt.ItemDataRole.UserRole, agent_id)
+            font = item.font()
+            font.setPointSizeF(font.pointSizeF() - 1)
+            item.setFont(font)
             self.agent_list.addItem(item)
 
         if current_id:
@@ -203,9 +245,13 @@ class MainWindow(QMainWindow):
 
         for _, session_id, name in sessions:
             meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
-            text = f"{name}\n{meta.updated_at}"
-            item = QListWidgetItem(text)
+            display_time = meta.updated_at[:16].replace("T", " ") if meta.updated_at else ""
+            item = QListWidgetItem()
+            item.setText(f"{name}\n  {display_time}")
             item.setData(Qt.ItemDataRole.UserRole, session_id)
+            font = item.font()
+            font.setPointSizeF(font.pointSizeF() - 1)
+            item.setFont(font)
             self.session_list.addItem(item)
 
         if current_id:
@@ -213,6 +259,8 @@ class MainWindow(QMainWindow):
                           if self.session_list.item(i).data(Qt.ItemDataRole.UserRole) == current_id), -1)
             if index >= 0:
                 self.session_list.setCurrentRow(index)
+
+    # ── Event handlers ──────────────────────────────────────────────────
 
     def _on_agent_selected(self, current: QListWidgetItem | None) -> None:
         if current is None:
@@ -249,11 +297,28 @@ class MainWindow(QMainWindow):
             session_id = self.session_panel.active_session.meta.id
         self.refresh_session_list(select_id=session_id)
 
+    # ── Placeholder page ────────────────────────────────────────────────
+
     def _build_placeholder(self, text: str) -> QWidget:
         frame = QWidget()
         layout = QVBoxLayout(frame)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        icon = QLabel()
+        icon.setFixedSize(48, 48)
+        icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        icon.setStyleSheet(
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #8b5cf6);"
+            "border-radius: 12px;"
+            "color: #f8fafc;"
+            "font-size: 20px;"
+            "font-weight: bold;"
+        )
+        icon.setText("T")
+        layout.addWidget(icon, alignment=Qt.AlignmentFlag.AlignCenter)
+
         label = QLabel(text)
-        label.setStyleSheet("color: #94a3b8;")
+        label.setStyleSheet("color: #64748b; font-size: 13px; margin-top: 12px;")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
         return frame

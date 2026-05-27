@@ -354,24 +354,27 @@ class ChatBubbleWidget(QFrame):
 
     def _apply_role_style(self, role: str) -> None:
         if role == "user":
-            bg = "#2563eb"
-            fg = "#f8fafc"
-            border = "#1d4ed8"
+            bg = "#1d4ed8"
+            fg = "#eff6ff"
+            border = "#2563eb"
+            avatar_bg = "#3b82f6"
         elif role == "assistant":
-            bg = "#1f2937"
-            fg = "#f8fafc"
-            border = "#334155"
-        else:
             bg = "#111827"
+            fg = "#e2e8f0"
+            border = "#1e293b"
+            avatar_bg = "#334155"
+        else:
+            bg = "#0f172a"
             fg = "#94a3b8"
-            border = "#334155"
+            border = "#1e293b"
+            avatar_bg = "#1e293b"
 
         self.setStyleSheet(
             "QFrame {"
             f"background-color: {bg};"
             f"color: {fg};"
             f"border: 1px solid {border};"
-            "border-radius: 10px;"
+            "border-radius: 12px;"
             "}"
         )
         self._text_color = fg
@@ -382,32 +385,34 @@ class ChatBubbleWidget(QFrame):
                 "border: none;"
                 f"color: {fg};"
                 "font-size: 12.5px;"
+                "line-height: 1.6;"
                 "}"
                 "QTextBrowser a { color: #60a5fa; }"
-                "QTextBrowser code { background: rgba(15, 23, 42, 0.6); padding: 1px 4px; }"
-                "QTextBrowser pre { background: rgba(15, 23, 42, 0.6); padding: 8px; border-radius: 6px; }"
-                "QTextBrowser blockquote { color: #94a3b8; border-left: 3px solid #334155; margin: 6px 0; padding-left: 8px; }"
+                "QTextBrowser code { background: rgba(0,0,0,0.25); padding: 2px 5px; border-radius: 4px; font-size: 11.5px; }"
+                "QTextBrowser pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 11.5px; }"
+                "QTextBrowser blockquote { color: #94a3b8; border-left: 3px solid #334155; margin: 6px 0; padding: 4px 10px; }"
             )
         self.avatar.setStyleSheet(
             "QLabel {"
-            f"background: {border};"
+            f"background-color: {avatar_bg};"
             f"color: {fg};"
             "border-radius: 11px;"
             "font-size: 10px;"
-            "font-weight: 600;"
+            "font-weight: 700;"
             "}"
         )
         self.copy_button.setStyleSheet(
             "QPushButton {"
             "background: transparent;"
-            f"color: {fg};"
+            f"color: #64748b;"
             "border: 1px solid transparent;"
-            "padding: 0 6px;"
+            "border-radius: 4px;"
+            "padding: 2px 8px;"
             "font-size: 10px;"
             "}"
             "QPushButton:hover {"
-            "border-color: rgba(148, 163, 184, 0.6);"
-            "background: rgba(15, 23, 42, 0.4);"
+            "color: {fg};"
+            "background: rgba(148, 163, 184, 0.1);"
             "}"
         )
 
@@ -449,11 +454,15 @@ class ChatViewWidget(QWidget):
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
         self.scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self.scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+        )
 
         self.container = QWidget()
+        self.container.setStyleSheet("background: transparent;")
         self.container_layout = QVBoxLayout(self.container)
-        self.container_layout.setContentsMargins(8, 8, 8, 8)
-        self.container_layout.setSpacing(12)
+        self.container_layout.setContentsMargins(12, 12, 12, 12)
+        self.container_layout.setSpacing(14)
         self.container_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         self._spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
@@ -522,22 +531,56 @@ def _katex_shell_html(color: str) -> str:
 <link rel="stylesheet" href="katex.min.css" />
 <link rel="stylesheet" href="../highlight/github-dark.min.css" />
 <style>
-body {{ margin: 0; background: transparent; color: {color}; font-family: 'IBM Plex Sans','Segoe UI',sans-serif; font-size: 12.5px; }}
+body {{
+  margin: 0; padding: 2px 0;
+  background: transparent;
+  color: {color};
+  font-family: 'IBM Plex Sans','Segoe UI','Noto Sans SC',sans-serif;
+  font-size: 12.5px;
+  line-height: 1.65;
+}}
 #content {{ white-space: pre-wrap; word-break: break-word; }}
-pre, code {{ font-family: 'JetBrains Mono','Cascadia Code','Fira Code',monospace; font-size: 11.5px; }}
-pre {{ white-space: pre-wrap; padding: 8px; border-radius: 6px; }}
-table {{ border-collapse: collapse; }}
-th, td {{ border: 1px solid rgba(148,163,184,0.3); padding: 4px 6px; }}
-blockquote {{ color: #94a3b8; border-left: 3px solid #334155; margin: 6px 0; padding-left: 8px; }}
-img {{ max-width: 100%; }}
-a {{ color: #60a5fa; }}
+p {{ margin: 0.4em 0; }}
+pre, code {{
+  font-family: 'JetBrains Mono','Cascadia Code','Fira Code','Consolas',monospace;
+  font-size: 11.5px;
+}}
+pre {{
+  white-space: pre-wrap;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.3);
+  line-height: 1.5;
+}}
+code {{ background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 4px; }}
+pre code {{ background: none; padding: 0; border-radius: 0; }}
+table {{ border-collapse: collapse; width: 100%; }}
+th, td {{ border: 1px solid rgba(148,163,184,0.2); padding: 6px 10px; text-align: left; }}
+th {{ background: rgba(0,0,0,0.2); font-weight: 600; }}
+blockquote {{
+  color: #94a3b8;
+  border-left: 3px solid #3b82f6;
+  margin: 8px 0;
+  padding: 2px 12px;
+}}
+img {{ max-width: 100%; border-radius: 6px; }}
+a {{ color: #60a5fa; text-decoration: none; }}
+a:hover {{ text-decoration: underline; }}
 .katex-display {{ overflow-x: auto; overflow-y: hidden; padding: 4px 0; }}
+.katex {{ font-size: 1.05em; }}
+hr {{ border: none; border-top: 1px solid #1e293b; margin: 12px 0; }}
+ul, ol {{ padding-left: 1.5em; }}
+li {{ margin: 2px 0; }}
+h1, h2, h3, h4 {{ margin: 12px 0 4px 0; font-weight: 600; line-height: 1.3; }}
+h1 {{ font-size: 1.3em; }}
+h2 {{ font-size: 1.15em; }}
+h3 {{ font-size: 1.05em; }}
 </style>
 <script src="katex.min.js"></script>
 <script src="auto-render.min.js"></script>
 <script src="../highlight/highlight.min.js"></script>
 <script>
-const delimiters = [
+var delimiters = [
   {{left: "\\\\(", right: "\\\\)", display: false}},
   {{left: "\\\\[", right: "\\\\]", display: true}},
   {{left: "$$", right: "$$", display: true}},
@@ -545,7 +588,7 @@ const delimiters = [
 ];
 
 function setHtml(html, renderLatex) {{
-  const content = document.getElementById("content");
+  var content = document.getElementById("content");
   content.innerHTML = html || "";
   if (window.hljs) {{
     try {{ hljs.highlightAll(); }} catch(e) {{ console.error(e); }}

@@ -5,6 +5,7 @@ import asyncio
 from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (
     QComboBox,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
@@ -89,45 +90,108 @@ class SessionPanel(QWidget):
         self._page_stack: QVBoxLayout | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setContentsMargins(0, 0, 0, 0)
 
-        header = QHBoxLayout()
+        # ── Toolbar ──
+        toolbar = QFrame()
+        toolbar.setFixedHeight(48)
+        toolbar.setStyleSheet(
+            "QFrame { background-color: #0b1120; border-bottom: 1px solid #1e293b; }"
+        )
+        toolbar_layout = QHBoxLayout(toolbar)
+        toolbar_layout.setContentsMargins(16, 0, 16, 0)
+        toolbar_layout.setSpacing(10)
+
         if show_session_header:
-            header.addWidget(QLabel("Session"))
-            self.session_combo = QComboBox()
-            header.addWidget(self.session_combo)
-            self.new_session_button = QPushButton("New Session")
-            header.addWidget(self.new_session_button)
-            header.addSpacing(12)
-        header.addWidget(QLabel("Target Agent"))
-        self.agent_combo = QComboBox()
-        header.addWidget(self.agent_combo)
-        header.addStretch(1)
-        layout.addLayout(header)
+            session_label = QLabel("Session")
+            session_label.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
+            toolbar_layout.addWidget(session_label)
 
+            self.session_combo = QComboBox()
+            self.session_combo.setMinimumWidth(180)
+            self.session_combo.setFixedHeight(32)
+            toolbar_layout.addWidget(self.session_combo)
+
+            self.new_session_button = QPushButton("+ New")
+            self.new_session_button.setProperty("cssClass", "small")
+            self.new_session_button.setFixedHeight(32)
+            toolbar_layout.addWidget(self.new_session_button)
+
+            sep = QFrame()
+            sep.setFrameShape(QFrame.Shape.VLine)
+            sep.setStyleSheet("background-color: #1e293b; max-width: 1px; border: none;")
+            sep.setFixedHeight(20)
+            toolbar_layout.addWidget(sep)
+
+        agent_label = QLabel("Agent")
+        agent_label.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
+        toolbar_layout.addWidget(agent_label)
+
+        self.agent_combo = QComboBox()
+        self.agent_combo.setMinimumWidth(180)
+        self.agent_combo.setFixedHeight(32)
+        toolbar_layout.addWidget(self.agent_combo)
+        toolbar_layout.addStretch(1)
+
+        layout.addWidget(toolbar)
+
+        # ── Chat page ──
         self._chat_page = QWidget()
         chat_layout = QVBoxLayout(self._chat_page)
         chat_layout.setContentsMargins(0, 0, 0, 0)
+        chat_layout.setSpacing(0)
 
         self.chat_view = ChatViewWidget()
         chat_layout.addWidget(self.chat_view, stretch=1)
 
-        input_row = QHBoxLayout()
-        self.input_box = QPlainTextEdit()
-        self.input_box.setFixedHeight(80)
-        input_row.addWidget(self.input_box, stretch=1)
-        self.send_button = QPushButton("Send")
-        input_row.addWidget(self.send_button)
-        chat_layout.addLayout(input_row)
+        # Input bar
+        input_bar = QFrame()
+        input_bar.setStyleSheet(
+            "QFrame { background-color: #0b1120; border-top: 1px solid #1e293b; }"
+        )
+        input_layout = QHBoxLayout(input_bar)
+        input_layout.setContentsMargins(16, 10, 16, 10)
+        input_layout.setSpacing(10)
 
+        self.input_box = QPlainTextEdit()
+        self.input_box.setPlaceholderText("Type a message... (Enter to send, Shift+Enter for new line)")
+        self.input_box.setFixedHeight(60)
+        self.input_box.setStyleSheet(
+            "QPlainTextEdit {"
+            "background-color: #0f172a;"
+            "border: 1px solid #1e293b;"
+            "border-radius: 10px;"
+            "padding: 10px 14px;"
+            "color: #e2e8f0;"
+            "font-size: 12.5px;"
+            "}"
+            "QPlainTextEdit:focus {"
+            "border-color: #3b82f6;"
+            "}"
+        )
+        input_layout.addWidget(self.input_box, stretch=1)
+
+        self.send_button = QPushButton("Send")
+        self.send_button.setProperty("cssClass", "primary")
+        self.send_button.setFixedHeight(40)
+        self.send_button.setFixedWidth(64)
+        input_layout.addWidget(self.send_button)
+
+        chat_layout.addWidget(input_bar)
+
+        # ── Create page ──
         self._session_create = SessionCreateWidget()
 
+        # ── Page stack ──
         self._page_stack = QVBoxLayout()
+        self._page_stack.setContentsMargins(0, 0, 0, 0)
         self._page_stack.addWidget(self._chat_page)
         self._page_stack.addWidget(self._session_create)
         layout.addLayout(self._page_stack, stretch=1)
 
+        # ── Connections ──
         self.send_button.clicked.connect(self.send_message)
+        self.input_box.installEventFilter(self)
         if self.new_session_button:
             self.new_session_button.clicked.connect(self.show_create_page)
         if self.session_combo:
@@ -140,6 +204,18 @@ class SessionPanel(QWidget):
         self.refresh_sessions(select_latest=True)
         self._sync_create_agents()
         self.show_chat_page()
+
+    # ── Enter-to-send ───────────────────────────────────────────────────
+
+    def eventFilter(self, obj, event) -> bool:
+        from PyQt6.QtCore import QEvent
+        if obj is self.input_box and event.type() == QEvent.Type.KeyPress:
+            if event.key() == Qt.Key.Key_Return and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+                self.send_message()
+                return True
+        return super().eventFilter(obj, event)
+
+    # ── Agent / Session list ────────────────────────────────────────────
 
     def refresh_agents(self) -> None:
         self.agent_combo.clear()
@@ -186,6 +262,8 @@ class SessionPanel(QWidget):
             if index >= 0:
                 self.session_combo.setCurrentIndex(index)
 
+    # ── Page switching ──────────────────────────────────────────────────
+
     def show_create_page(self) -> None:
         if self._worker and self._worker.isRunning():
             return
@@ -224,6 +302,8 @@ class SessionPanel(QWidget):
         self._render_session(session)
         self.sessions_changed.emit()
         self.show_chat_page()
+
+    # ── Messaging ───────────────────────────────────────────────────────
 
     def send_message(self) -> None:
         content = self.input_box.toPlainText().strip()
@@ -280,12 +360,7 @@ class SessionPanel(QWidget):
     def _on_finished(self, reply: str) -> None:
         if self._stream_bubble:
             self.chat_view.flush_stream_to_message(self._stream_bubble)
-        self.send_button.setEnabled(True)
-        self.input_box.setEnabled(True)
-        if self.session_combo:
-            self.session_combo.setEnabled(True)
-        if self.new_session_button:
-            self.new_session_button.setEnabled(True)
+        self._enable_input()
         self._suppress_reload = True
         self.refresh_sessions()
         self._suppress_reload = False
@@ -294,16 +369,21 @@ class SessionPanel(QWidget):
     def _on_failed(self, message: str) -> None:
         if self._stream_bubble:
             self.chat_view.update_message(self._stream_bubble, f"[Error] {message}", render_latex=False)
+        self._enable_input()
+        self._suppress_reload = True
+        self.refresh_sessions()
+        self._suppress_reload = False
+        self.sessions_changed.emit()
+
+    def _enable_input(self) -> None:
         self.send_button.setEnabled(True)
         self.input_box.setEnabled(True)
         if self.session_combo:
             self.session_combo.setEnabled(True)
         if self.new_session_button:
             self.new_session_button.setEnabled(True)
-        self._suppress_reload = True
-        self.refresh_sessions()
-        self._suppress_reload = False
-        self.sessions_changed.emit()
+
+    # ── Session loading ─────────────────────────────────────────────────
 
     def load_selected_session(self) -> None:
         if self._suppress_reload:
