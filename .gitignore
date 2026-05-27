@@ -34,3 +34,10 @@ CLAUDE.md.local
 # OS
 .DS_Store
 Thumbs.db
+
+#tools
+claude.bat
+
+#others
+procession/
+ACTs_UI_Design.html
