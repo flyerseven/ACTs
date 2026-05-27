@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QTimer, QUrl
+from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
@@ -21,13 +21,14 @@ from PyQt6.QtWidgets import (
 )
 
 try:
-    from PyQt6.QtWebEngineCore import QWebEngineSettings
+    from PyQt6.QtWebEngineCore import QWebEngineSettings, QWebEnginePage
     from PyQt6.QtWebEngineWidgets import QWebEngineView
 
     _HAS_WEBENGINE = True
 except Exception:
     QWebEngineView = None
     QWebEngineSettings = None
+    QWebEnginePage = None
     _HAS_WEBENGINE = False
 
 try:
@@ -47,6 +48,7 @@ DELIM_PAIRS = [
     {"open": "$$", "close": "$$", "display": True},
     {"open": "$", "close": "$", "display": False},
 ]
+
 
 
 def _is_escaped(s: str, pos: int) -> bool:
@@ -118,6 +120,24 @@ class StreamingBuffer:
 # ── Chat bubble ──────────────────────────────────────────────────────────
 
 
+if _HAS_WEBENGINE:
+
+    class _ClipboardPage(QWebEnginePage):
+        """Intercepts clipboard:// URLs so JS code-copy buttons can reach the
+        system clipboard through PyQt6 (navigator.clipboard is blocked in
+        file:// contexts)."""
+
+        def acceptNavigationRequest(self, url, nav_type, is_main_frame):
+            if url.scheme() == "clipboard":
+                from urllib.parse import unquote
+                text = unquote(url.toString().removeprefix("clipboard://copy?text="))
+                clipboard = QApplication.clipboard()
+                if clipboard is not None:
+                    clipboard.setText(text)
+                return False
+            return super().acceptNavigationRequest(url, nav_type, is_main_frame)
+
+
 class ChatBubbleWidget(QFrame):
     """A single chat message bubble.
 
@@ -169,8 +189,9 @@ class ChatBubbleWidget(QFrame):
         # ── content area ──
         if self._use_web:
             self.label = QWebEngineView()
+            self.label.setPage(_ClipboardPage(self.label))
             self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
-            settings = self.label.settings()
+            settings = self.label.page().settings()
             settings.setAttribute(QWebEngineSettings.WebAttribute.ShowScrollBars, False)
             settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
@@ -462,6 +483,8 @@ class ChatRowWidget(QWidget):
 
 
 class ChatViewWidget(QWidget):
+    scrolled_to_top = pyqtSignal()
+
     def __init__(self) -> None:
         super().__init__()
         layout = QVBoxLayout(self)
@@ -487,6 +510,10 @@ class ChatViewWidget(QWidget):
         self.scroll.setWidget(self.container)
         layout.addWidget(self.scroll)
 
+        bar = self.scroll.verticalScrollBar()
+        if bar is not None:
+            bar.valueChanged.connect(self._on_scroll_value_changed)
+
     def clear(self) -> None:
         while self.container_layout.count():
             item = self.container_layout.takeAt(0)
@@ -504,6 +531,27 @@ class ChatViewWidget(QWidget):
         row = ChatRowWidget(bubble, align_right)
         self.container_layout.insertWidget(self.container_layout.count() - 1, row)
         self._scroll_to_bottom()
+        return bubble
+
+    def prepend_message(self, role: str, content: str, render_latex: bool = True) -> ChatBubbleWidget:
+        """Insert a message at the top (for loading earlier history)."""
+        bar = self.scroll.verticalScrollBar()
+        old_max = bar.maximum() if bar else 0
+        old_value = bar.value() if bar else 0
+
+        bubble = ChatBubbleWidget(role, content)
+        if render_latex:
+            bubble.set_content(content, render_latex=True)
+        align_right = role == "user"
+        row = ChatRowWidget(bubble, align_right)
+        self.container_layout.insertWidget(0, row)
+
+        if bar:
+            def _restore() -> None:
+                new_max = bar.maximum()
+                bar.setValue(old_value + (new_max - old_max))
+            QTimer.singleShot(0, _restore)
+
         return bubble
 
     def update_message(self, bubble: ChatBubbleWidget, content: str, render_latex: bool = False) -> None:
@@ -526,6 +574,10 @@ class ChatViewWidget(QWidget):
         bar = self.scroll.verticalScrollBar()
         if bar is not None:
             bar.setValue(bar.maximum())
+
+    def _on_scroll_value_changed(self, value: int) -> None:
+        if value == 0:
+            self.scrolled_to_top.emit()
 
 
 # ── KaTeX / highlight.js shell HTML ─────────────────────────────────────
@@ -651,25 +703,13 @@ function addCopyButtons() {{
       btn.textContent = 'Copy';
       btn.onclick = function() {{
         var code = pre.textContent || '';
-        var done = function() {{
-          btn.textContent = 'Copied!';
-          btn.style.color = '#4ade80';
-          setTimeout(function() {{
-            btn.textContent = 'Copy';
-            btn.style.color = '';
-          }}, 2000);
-        }};
-        if (navigator.clipboard && navigator.clipboard.writeText) {{
-          navigator.clipboard.writeText(code).then(done).catch(function() {{ btn.textContent = 'Error'; }});
-        }} else {{
-          var ta = document.createElement('textarea');
-          ta.value = code;
-          ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
-          document.body.appendChild(ta);
-          ta.select();
-          try {{ document.execCommand('copy'); done(); }} catch(e) {{ btn.textContent = 'Error'; }}
-          document.body.removeChild(ta);
-        }}
+        window.location.href = 'clipboard://copy?text=' + encodeURIComponent(code);
+        btn.textContent = 'Copied!';
+        btn.style.color = '#4ade80';
+        setTimeout(function() {{
+          btn.textContent = 'Copy';
+          btn.style.color = '';
+        }}, 2000);
       }};
       pre.appendChild(btn);
     }})(pres[i]);
@@ -710,22 +750,44 @@ def _markdown_to_html(text: str) -> str:
     if not _HAS_MARKDOWN:
         return f"<pre>{html.escape(text)}</pre>"
 
-    math_blocks = []
+    math_blocks: list[str] = []
 
-    def stash(m: re.Match) -> str:
+    def stash_math(m: re.Match) -> str:
         math_blocks.append(m.group(0))
         return f"<!--MATHBLOCK{len(math_blocks) - 1}-->"
 
     # Stash math blocks before Markdown conversion so their contents
     # (underscores, asterisks, etc.) are not interpreted as Markdown.
-    text = re.sub(r"\\\[[\s\S]*?\\\]", stash, text)
-    text = re.sub(r"\\\([\s\S]*?\\\)", stash, text)
-    text = re.sub(r"\$\$[\s\S]*?\$\$", stash, text)
-    text = re.sub(r"\$[^$\n\r]+?\$", stash, text)
+    text = re.sub(r"\\\[[\s\S]*?\\\]", stash_math, text)
+    text = re.sub(r"\\\([\s\S]*?\\\)", stash_math, text)
+    text = re.sub(r"\$\$[\s\S]*?\$\$", stash_math, text)
+    text = re.sub(r"\$[^$\n\r]+?\$", stash_math, text)
 
     html_out = markdown.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
 
     for i, block in enumerate(math_blocks):
-        html_out = html_out.replace(f"<!--MATHBLOCK{i}-->", html.escape(block))
+        html_out = _restore_block(html_out, f"<!--MATHBLOCK{i}-->", html.escape(block))
+
+    return html_out
+
+
+def _restore_block(html_out: str, placeholder: str, replacement: str, *, fallback: str | None = None) -> str:
+    """Replace *placeholder* with *replacement* in *html_out*.
+
+    If the placeholder was HTML-escaped (e.g. because it landed inside a
+    fenced or indented code block), restore the original source text
+    instead — we do NOT attempt to render diagrams / math inside code blocks.
+    """
+    if placeholder in html_out:
+        return html_out.replace(placeholder, replacement)
+
+    escaped_placeholder = html.escape(placeholder)
+    if escaped_placeholder in html_out:
+        if fallback is not None:
+            return html_out.replace(escaped_placeholder, html.escape(fallback))
+        # No explicit fallback — use the escaped replacement
+        escaped_replacement = html.escape(replacement)
+        if escaped_replacement != escaped_placeholder:
+            return html_out.replace(escaped_placeholder, escaped_replacement)
 
     return html_out

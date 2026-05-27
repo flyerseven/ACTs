@@ -54,7 +54,7 @@ class ChatWorker(QThread):
         agent = await Agent.load(self.agent_id, self.store, self.vault, token_tracker=self.token_tracker)
         reply_parts: list[str] = []
         try:
-            messages = self.session.build_context_messages()
+            messages = self.session.build_context_messages(agent.config.system_prompt)
             async for chunk in agent.chat_stream(messages, session_id=self.session.meta.id):
                 reply_parts.append(chunk)
                 self.chunk_received.emit(chunk)
@@ -71,6 +71,8 @@ class ChatWorker(QThread):
 
 
 class SessionPanel(QWidget):
+    PAGE_SIZE = 20
+
     sessions_changed = pyqtSignal()
     session_edited = pyqtSignal(str)  # session_id
 
@@ -89,6 +91,9 @@ class SessionPanel(QWidget):
         self._session_create: SessionCreateWidget | None = None
         self._chat_page: QWidget | None = None
         self._page_stack: QVBoxLayout | None = None
+        self._display_offset: int = 0
+        self._all_messages: list = []
+        self._suppress_scroll_load: bool = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -189,6 +194,9 @@ class SessionPanel(QWidget):
         self._page_stack.addWidget(self._chat_page)
         self._page_stack.addWidget(self._session_create)
         layout.addLayout(self._page_stack, stretch=1)
+
+        # ── Pagination ──
+        self.chat_view.scrolled_to_top.connect(self._load_more_messages)
 
         # ── Connections ──
         self.send_button.clicked.connect(self.send_message)
@@ -416,12 +424,42 @@ class SessionPanel(QWidget):
                 self.agent_combo.setCurrentIndex(index)
 
     def _render_session(self, session: Session) -> None:
+        self._suppress_scroll_load = True
         self.chat_view.clear()
-        for msg in session.messages:
+        self._all_messages = list(session.messages)
+        total = len(self._all_messages)
+        self._display_offset = max(0, total - self.PAGE_SIZE)
+        for msg in self._all_messages[self._display_offset:]:
             self.chat_view.add_message(msg.role, msg.content, render_latex=True)
+        # Keep scrolling to bottom at increasing delays — WebEngine renders
+        # KaTeX asynchronously so the content height grows over time.
         self.chat_view.scroll_to_bottom()
-        QTimer.singleShot(500, self.chat_view._scroll_to_bottom)
-        QTimer.singleShot(1000, self.chat_view._scroll_to_bottom)
+        QTimer.singleShot(300, self.chat_view._scroll_to_bottom)
+        QTimer.singleShot(800, self.chat_view._scroll_to_bottom)
+        QTimer.singleShot(1500, self._enable_scroll_load)
+
+    def _enable_scroll_load(self) -> None:
+        self._suppress_scroll_load = False
+        self.chat_view._scroll_to_bottom()
+
+    def _load_more_messages(self) -> None:
+        if self._suppress_scroll_load:
+            return
+        if not self.active_session:
+            return
+        current = list(self.active_session.messages)
+        if len(current) > len(self._all_messages):
+            self._display_offset += len(current) - len(self._all_messages)
+            self._all_messages = current
+        else:
+            self._all_messages = current
+        if self._display_offset <= 0:
+            return
+        start = max(0, self._display_offset - self.PAGE_SIZE)
+        batch = self._all_messages[start:self._display_offset]
+        for msg in reversed(batch):
+            self.chat_view.prepend_message(msg.role, msg.content, render_latex=True)
+        self._display_offset = start
 
     def edit_session_meta(self, session_id: str, **kwargs: object) -> None:
         meta_path = self.store.session_yaml_path(session_id)

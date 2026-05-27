@@ -69,10 +69,11 @@ class Session:
         self.meta.updated_at = utc_now_iso()
         return msg
 
-    def build_context_messages(self) -> list[dict[str, str]]:
+    def build_context_messages(self, agent_system_prompt: str = "") -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
-        if self.meta.system_prompt:
-            messages.append({"role": "system", "content": self.meta.system_prompt})
+        system_prompt = self.meta.system_prompt or agent_system_prompt
+        if system_prompt:
+            messages.append({"role": "system", "content": system_prompt})
         if self.meta.summary:
             summary = f"Summary of previous context:\n{self.meta.summary}"
             messages.append({"role": "system", "content": summary})

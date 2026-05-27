@@ -32,32 +32,51 @@ pytest tests/test_agent.py::test_agent_chat -v
 
 ```
 main.py  (entry point — parses args, wires Store/Vault, launches MainWindow)
-└── src/
-    ├── core/        Domain models + business logic
-    │   ├── models.py    Dataclasses: AgentConfig, LLMConfig, SessionMeta, Message (with YAML dict converters)
-    │   ├── agent.py     Agent.load() + chat/chat_stream via LLMAdapter
-    │   ├── session.py   Session.create/load, message persistence, context compression
-    │   ├── team.py      AgentTeam stub (Phase 2)
-    │   └── skill.py     Skill stub (Phase 2)
-    ├── llm/         LLM adapter abstraction
-    │   ├── base.py       LLMAdapter ABC + MockAdapter (echoes last user message)
-    │   ├── openai_compat.py  OpenAICompatAdapter (httpx streaming SSE → AsyncGenerator[str])
-    │   └── factory.py    LLMAdapterFactory.create() — routes by provider string
-    ├── storage/     File-system persistence + optional SQLite index
-    │   ├── file_store.py   Path layout: Acts/{Agents,Sessions,Team}/. Creates `.vault.enc` + `index.db` paths.
-    │   ├── yaml_io.py      Thin wrappers around PyYAML (safe_load/safe_dump)
-    │   └── db.py           aiosqlite schema + upsert helpers (async, for future indexing)
-    ├── security/    Encrypted vault for API keys
-    │   └── vault.py    AES-256-GCM encryption. Master key via keyring or local `.key` file. Resolves `vault:<alias>` refs.
-    ├── ui/          PyQt6 desktop GUI (dark theme)
-    │   ├── main_window.py         3-tab sidebar (Agents/Teams/Sessions) + stacked content area
-    │   ├── agent_panel.py         Agent CRUD + LLM config form
-    │   ├── session_panel.py       Session list, routing to session create / chat views
-    │   ├── session_create_panel.py  Session creation form (system prompt, context params)
-    │   ├── chat_widget.py         Chat bubbles with Markdown rendering via QWebEngineView, KaTeX math, highlight.js
-    │   ├── styles.py              Global dark-theme QSS
-    │   └── assets/                Bundled KaTeX + highlight.js for offline rendering
-    └── utils/       Logging setup + 8-char hex ID generator
+├── scripts/
+│   ├── fetch_highlight.py   Downloads highlight.js for offline bundling
+│   ├── fetch_katex.py       Downloads KaTeX for offline math rendering
+│   ├── fetch_mathjax.py     Downloads MathJax as alternative math renderer
+│   ├── test_markdown_math.py  Standalone math rendering test harness
+│   └── track_claude.py      Claude Code session tracker utility
+├── src/
+│   ├── core/        Domain models + business logic
+│   │   ├── models.py         Dataclasses: AgentConfig, LLMConfig, SessionMeta, Message (with YAML dict converters)
+│   │   ├── agent.py          Agent.load() + chat/chat_stream via LLMAdapter
+│   │   ├── session.py        Session.create/load, message persistence, context compression
+│   │   ├── token_tracker.py  Token usage tracking per Agent/Session
+│   │   ├── team.py           AgentTeam stub (Phase 2)
+│   │   └── skill.py          Skill stub (Phase 2)
+│   ├── llm/         LLM adapter abstraction
+│   │   ├── base.py           LLMAdapter ABC + MockAdapter (echoes last user message)
+│   │   ├── openai_compat.py  OpenAICompatAdapter (httpx streaming SSE → AsyncGenerator[str])
+│   │   └── factory.py        LLMAdapterFactory.create() — routes by provider string
+│   ├── storage/     File-system persistence + optional SQLite index
+│   │   ├── file_store.py     Path layout: Acts/{Agents,Sessions,Team}/. Creates `.vault.enc` + `index.db` paths.
+│   │   ├── yaml_io.py        Thin wrappers around PyYAML (safe_load/safe_dump)
+│   │   └── db.py             aiosqlite schema + upsert helpers (async, for future indexing)
+│   ├── security/    Encrypted vault for API keys
+│   │   └── vault.py          AES-256-GCM encryption. Master key via keyring or local `.key` file. Resolves `vault:<alias>` refs.
+│   ├── ui/          PyQt6 desktop GUI (dark theme)
+│   │   ├── main_window.py         3-tab sidebar (Agents/Teams/Sessions) + stacked content area
+│   │   ├── agent_panel.py         Agent CRUD + LLM config form
+│   │   ├── session_panel.py       Session list, routing to session create / chat views
+│   │   ├── session_create_panel.py  Session creation form (system prompt, context params)
+│   │   ├── chat_widget.py         Chat bubbles with Markdown rendering via QWebEngineView, KaTeX math, highlight.js
+│   │   ├── styles.py              Global dark-theme QSS
+│   │   └── assets/                Bundled KaTeX + highlight.js for offline rendering
+│   │       ├── highlight/
+│   │       └── katex/
+│   └── utils/       Logging setup + 8-char hex ID generator
+│       ├── id_gen.py         8-char hex ID generation
+│       └── logger.py         Structured logging configuration
+└── tests/
+    ├── conftest.py                 Pytest fixtures (temp Store/Vault)
+    ├── test_agent.py               Agent chat + streaming tests
+    ├── test_session.py             Session CRUD + persistence tests
+    ├── test_storage.py             FileStore path layout tests
+    ├── test_db.py                  SQLite index schema tests
+    ├── test_latex_streaming_visual.py  Visual diff-based LaTeX streaming tests
+    └── test_parse_state_machine.py     Incremental message parser state machine tests
 ```
 
 ## Key design decisions

@@ -9,10 +9,20 @@ from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-try:
-    import keyring
-except Exception:  # pragma: no cover
-    keyring = None
+_keyring = None
+_keyring_attempted = False
+
+
+def _get_keyring():
+    global _keyring, _keyring_attempted
+    if not _keyring_attempted:
+        _keyring_attempted = True
+        try:
+            import keyring as _kr
+            _keyring = _kr
+        except Exception:  # pragma: no cover
+            pass
+    return _keyring
 
 
 @dataclass
@@ -25,11 +35,12 @@ class Vault:
     def __init__(self, vault_path: Path, service_name: str = "ACTs", use_keyring: bool | None = None) -> None:
         self.vault_path = vault_path
         self.service_name = service_name
-        self.use_keyring = True if use_keyring is None else use_keyring
+        self.use_keyring = False if use_keyring is None else use_keyring
         self._data: dict[str, str] = {}
         self._key = self._load_master_key()
 
     def _load_master_key(self) -> bytes:
+        keyring = _get_keyring()
         if self.use_keyring and keyring is not None:
             try:
                 stored = keyring.get_password(self.service_name, "master_key")
