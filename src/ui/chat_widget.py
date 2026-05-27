@@ -45,7 +45,6 @@ DELIM_PAIRS = [
     {"open": "\\[", "close": "\\]", "display": True},
     {"open": "\\(", "close": "\\)", "display": False},
     {"open": "$$", "close": "$$", "display": True},
-    {"open": "$", "close": "$", "display": False},
 ]
 
 
@@ -141,6 +140,9 @@ class ChatBubbleWidget(QFrame):
         self._pending_render = False
         self._raw_text = ""
         self._buffer = StreamingBuffer()
+        self._render_timer = QTimer(self)
+        self._render_timer.setSingleShot(True)
+        self._render_timer.timeout.connect(self._on_stream_tick)
 
         # ── header ──
         header_layout = QHBoxLayout()
@@ -207,7 +209,7 @@ class ChatBubbleWidget(QFrame):
 
     # ── Public API ──────────────────────────────────────────────────────
 
-    def set_content(self, content: str, render_latex: bool = False) -> None:
+    def set_content(self, content: str, render_latex: bool = True) -> None:
         """Replace the entire content and re-render."""
         self._render_latex = render_latex
         self._raw_text = content
@@ -229,7 +231,14 @@ class ChatBubbleWidget(QFrame):
             else:
                 self.label.setMarkdown(self._raw_text)
         else:
-            self._render()
+            # Throttle renders during streaming to batch rapid chunks
+            if not self._render_timer.isActive():
+                self._render_timer.start(50)
+        self._apply_width_constraints()
+
+    def _on_stream_tick(self) -> None:
+        """Throttled render callback for streaming chunks."""
+        self._render()
         self._apply_width_constraints()
 
     def flush_stream(self) -> None:
@@ -240,6 +249,7 @@ class ChatBubbleWidget(QFrame):
                 if tail:
                     self.label.setMarkdown(self._raw_text)
         else:
+            self._render_timer.stop()
             self._render()
         self._apply_width_constraints()
 
@@ -473,15 +483,15 @@ class ChatViewWidget(QWidget):
 
     def add_message(self, role: str, content: str, render_latex: bool = True) -> ChatBubbleWidget:
         bubble = ChatBubbleWidget(role, content)
-        if render_latex:
-            bubble.set_content(content, render_latex=True)
+        if not render_latex:
+            bubble.set_content(content, render_latex=False)
         align_right = role == "user"
         row = ChatRowWidget(bubble, align_right)
         self.container_layout.insertWidget(self.container_layout.count() - 1, row)
         self._scroll_to_bottom()
         return bubble
 
-    def update_message(self, bubble: ChatBubbleWidget, content: str, render_latex: bool = False) -> None:
+    def update_message(self, bubble: ChatBubbleWidget, content: str, render_latex: bool = True) -> None:
         bubble.set_content(content, render_latex=render_latex)
         self._scroll_to_bottom()
 
@@ -531,6 +541,9 @@ th, td {{ border: 1px solid rgba(148,163,184,0.3); padding: 4px 6px; }}
 blockquote {{ color: #94a3b8; border-left: 3px solid #334155; margin: 6px 0; padding-left: 8px; }}
 img {{ max-width: 100%; }}
 a {{ color: #60a5fa; }}
+p {{ margin: 0.2em 0; }}
+ul, ol {{ margin: 0.2em 0; padding-left: 1.5em; }}
+li {{ margin: 0.1em 0; }}
 .katex-display {{ overflow-x: auto; overflow-y: hidden; padding: 4px 0; }}
 </style>
 <script src="katex.min.js"></script>
@@ -540,8 +553,7 @@ a {{ color: #60a5fa; }}
 const delimiters = [
   {{left: "\\\\(", right: "\\\\)", display: false}},
   {{left: "\\\\[", right: "\\\\]", display: true}},
-  {{left: "$$", right: "$$", display: true}},
-  {{left: "$", right: "$", display: false}}
+  {{left: "$$", right: "$$", display: true}}
 ];
 
 function setHtml(html, renderLatex) {{
@@ -576,22 +588,34 @@ def _markdown_to_html(text: str) -> str:
     if not _HAS_MARKDOWN:
         return f"<pre>{html.escape(text)}</pre>"
 
+    code_blocks = []
+
+    def stash_code(m: re.Match) -> str:
+        code_blocks.append(m.group(0))
+        return f"<!--CODEBLOCK{len(code_blocks) - 1}-->"
+
+    # Stash fenced code blocks first so $ inside code is not mistaken for math
+    text = re.sub(r"```[\s\S]*?```", stash_code, text)
+
     math_blocks = []
 
-    def stash(m: re.Match) -> str:
+    def stash_math(m: re.Match) -> str:
         math_blocks.append(m.group(0))
         return f"<!--MATHBLOCK{len(math_blocks) - 1}-->"
 
     # Stash math blocks before Markdown conversion so their contents
     # (underscores, asterisks, etc.) are not interpreted as Markdown.
-    text = re.sub(r"\\\[[\s\S]*?\\\]", stash, text)
-    text = re.sub(r"\\\([\s\S]*?\\\)", stash, text)
-    text = re.sub(r"\$\$[\s\S]*?\$\$", stash, text)
-    text = re.sub(r"\$[^$\n\r]+?\$", stash, text)
+    text = re.sub(r"\\\[[\s\S]*?\\\]", stash_math, text)
+    text = re.sub(r"\\\([\s\S]*?\\\)", stash_math, text)
+    text = re.sub(r"\$\$[\s\S]*?\$\$", stash_math, text)
 
-    html_out = markdown.markdown(text, extensions=["fenced_code", "tables", "sane_lists", "nl2br"])
+    html_out = markdown.markdown(text, extensions=["fenced_code", "tables", "sane_lists"])
 
     for i, block in enumerate(math_blocks):
-        html_out = html_out.replace(f"<!--MATHBLOCK{i}-->", html.escape(block))
+        # Don't escape LaTeX content - KaTeX needs raw LaTeX
+        html_out = html_out.replace(f"<!--MATHBLOCK{i}-->", block)
+
+    for i, block in enumerate(code_blocks):
+        html_out = html_out.replace(f"<!--CODEBLOCK{i}-->", markdown.markdown(block, extensions=["fenced_code", "tables", "sane_lists"]))
 
     return html_out

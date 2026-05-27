@@ -34,3 +34,6 @@ CLAUDE.md.local
 # OS
 .DS_Store
 Thumbs.db
+
+#tools
+claude.bat

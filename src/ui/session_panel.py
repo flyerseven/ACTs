@@ -54,6 +54,9 @@ class ChatWorker(QThread):
         reply_parts: list[str] = []
         try:
             messages = self.session.build_context_messages()
+            # Inject agent's system prompt if no session-level system prompt is set
+            if agent.config.system_prompt and not self.session.meta.system_prompt:
+                messages.insert(0, {"role": "system", "content": agent.config.system_prompt})
             async for chunk in agent.chat_stream(messages, session_id=self.session.meta.id):
                 reply_parts.append(chunk)
                 self.chunk_received.emit(chunk)
@@ -213,7 +216,6 @@ class SessionPanel(QWidget):
                 store=self.store,
                 context_keep_last=data.context_window,
                 compression_interval=data.compress_every,
-                system_prompt=data.system_prompt,
             )
         )
         self.active_session = session

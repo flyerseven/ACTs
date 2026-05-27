@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
-    QTextEdit,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -23,7 +22,6 @@ class SessionCreateData:
     target_id: str
     context_window: int
     compress_every: int
-    system_prompt: str
 
 
 class SessionCreateWidget(QWidget):
@@ -57,15 +55,10 @@ class SessionCreateWidget(QWidget):
         self.compress_every_input.setRange(0, 50)
         self.compress_every_input.setValue(10)
 
-        self.system_prompt_input = QTextEdit()
-        self.system_prompt_input.setPlaceholderText("Optional system prompt override")
-        self.system_prompt_input.setFixedHeight(110)
-
         form.addRow("Session Name", self.name_input)
         form.addRow("Agent", self.agent_combo)
         form.addRow("Context Window (messages)", self.context_window_input)
         form.addRow("Compress Every N Turns (0=off)", self.compress_every_input)
-        form.addRow("System Prompt", self.system_prompt_input)
 
         layout.addLayout(form)
 
@@ -91,7 +84,6 @@ class SessionCreateWidget(QWidget):
             self.agent_combo.setCurrentIndex(0)
         self.context_window_input.setValue(100)
         self.compress_every_input.setValue(10)
-        self.system_prompt_input.clear()
 
     def _on_create(self) -> None:
         name = self.name_input.text().strip() or "New Session"
@@ -101,6 +93,5 @@ class SessionCreateWidget(QWidget):
             target_id=target_id,
             context_window=int(self.context_window_input.value()),
             compress_every=int(self.compress_every_input.value()),
-            system_prompt=self.system_prompt_input.toPlainText().strip(),
         )
         self.create_requested.emit(data)
