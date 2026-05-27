@@ -43,6 +43,7 @@ class SessionMeta:
     status: str = "active"
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
+    group: str = ""
     tags: list[str] = field(default_factory=list)
     compression_interval: int = 10
     context_keep_last: int = 100
@@ -120,6 +121,7 @@ def session_meta_from_dict(data: dict[str, Any]) -> SessionMeta:
         status=str(data.get("status", "active")),
         created_at=str(data.get("created_at", utc_now_iso())),
         updated_at=str(data.get("updated_at", utc_now_iso())),
+        group=str(data.get("group", "")),
         tags=list(data.get("tags", [])),
         compression_interval=int(data.get("compression_interval", 0)),
         context_keep_last=int(data.get("context_keep_last", 12)),
@@ -139,6 +141,7 @@ def session_meta_to_dict(meta: SessionMeta) -> dict[str, Any]:
         "status": meta.status,
         "created_at": meta.created_at,
         "updated_at": meta.updated_at,
+        "group": meta.group,
         "tags": list(meta.tags),
         "compression_interval": meta.compression_interval,
         "context_keep_last": meta.context_keep_last,

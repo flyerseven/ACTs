@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import json
+import shutil
 from typing import Iterable
 
 from core.models import Message, SessionMeta, session_meta_from_dict, session_meta_to_dict, utc_now_iso
@@ -41,6 +42,12 @@ class Session:
         session = cls(meta=meta, store=store)
         await session.save()
         return session
+
+    @staticmethod
+    def delete(session_id: str, store: FileStore) -> None:
+        session_dir = store.session_dir(session_id)
+        if session_dir.exists():
+            shutil.rmtree(session_dir)
 
     @classmethod
     async def load(cls, session_id: str, store: FileStore) -> "Session":

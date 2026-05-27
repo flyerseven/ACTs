@@ -2,19 +2,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QPoint
+from PyQt6.QtGui import QFont, QAction
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
     QFrame,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
+    QMessageBox,
     QPushButton,
+    QSpinBox,
     QSplitter,
     QStackedWidget,
+    QTextEdit,
     QVBoxLayout,
     QWidget,
 )
@@ -71,6 +80,7 @@ class MainWindow(QMainWindow):
 
         self.agent_panel.agents_changed.connect(self._on_agents_changed)
         self.session_panel.sessions_changed.connect(self._on_sessions_changed)
+        self.session_panel.session_edited.connect(self._on_session_edited)
 
         self._set_active_tab(0)
         self.refresh_agent_list()
@@ -161,6 +171,7 @@ class MainWindow(QMainWindow):
 
         self.session_list = QListWidget()
         self.session_list.setWordWrap(True)
+        self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.session_add_button = QPushButton("+ New Session")
         self.sidebar_stack.addWidget(self._build_list_panel(self.session_list, self.session_add_button))
 
@@ -169,6 +180,7 @@ class MainWindow(QMainWindow):
         self.tab_group.buttonClicked.connect(lambda btn: self._set_active_tab(self.tab_group.id(btn)))
         self.agent_list.currentItemChanged.connect(self._on_agent_selected)
         self.session_list.currentItemChanged.connect(self._on_session_selected)
+        self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
         self.agent_add_button.clicked.connect(self._create_agent)
         self.session_add_button.clicked.connect(self._create_session)
 
@@ -240,10 +252,24 @@ class MainWindow(QMainWindow):
         sessions = []
         for session_id in self.store.list_sessions():
             meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
-            sessions.append((meta.updated_at, session_id, meta.name))
-        sessions.sort(reverse=True)
+            sessions.append((meta.group or "", meta.updated_at, session_id, meta.name))
+        sessions.sort(key=lambda x: (x[0], x[1]), reverse=True)
 
-        for _, session_id, name in sessions:
+        seen_groups: set[str] = set()
+        for group, _, session_id, name in sessions:
+            if group and group not in seen_groups:
+                seen_groups.add(group)
+                header = QListWidgetItem()
+                header.setText(f"  {group.upper()}")
+                header.setData(Qt.ItemDataRole.UserRole, f"__group__{group}")
+                header.setFlags(Qt.ItemFlag.NoItemFlags)
+                header_font = header.font()
+                header_font.setPointSizeF(header_font.pointSizeF() - 2)
+                header_font.setBold(True)
+                header.setFont(header_font)
+                header.setForeground(Qt.GlobalColor.gray)
+                self.session_list.addItem(header)
+
             meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
             display_time = meta.updated_at[:16].replace("T", " ") if meta.updated_at else ""
             item = QListWidgetItem()
@@ -254,7 +280,7 @@ class MainWindow(QMainWindow):
             item.setFont(font)
             self.session_list.addItem(item)
 
-        if current_id:
+        if current_id and not current_id.startswith("__group__"):
             index = next((i for i in range(self.session_list.count())
                           if self.session_list.item(i).data(Qt.ItemDataRole.UserRole) == current_id), -1)
             if index >= 0:
@@ -274,7 +300,7 @@ class MainWindow(QMainWindow):
         if current is None:
             return
         session_id = current.data(Qt.ItemDataRole.UserRole)
-        if session_id:
+        if session_id and not session_id.startswith("__group__"):
             self._set_active_tab(2)
             self.session_panel.load_session_by_id(session_id)
 
@@ -296,6 +322,135 @@ class MainWindow(QMainWindow):
         if self.session_panel.active_session:
             session_id = self.session_panel.active_session.meta.id
         self.refresh_session_list(select_id=session_id)
+
+    def _on_session_edited(self, session_id: str) -> None:
+        self.refresh_session_list(select_id=session_id)
+
+    # ── Session context menu ──────────────────────────────────────────
+
+    def _on_session_context_menu(self, pos: QPoint) -> None:
+        item = self.session_list.itemAt(pos)
+        if item is None:
+            return
+        session_id = item.data(Qt.ItemDataRole.UserRole)
+        if not session_id or session_id.startswith("__group__"):
+            return
+
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 4px; color: #e2e8f0; }"
+            "QMenu::item { padding: 6px 20px; border-radius: 4px; }"
+            "QMenu::item:selected { background-color: #1d4ed8; }"
+            "QMenu::separator { height: 1px; background: #1e293b; margin: 4px 8px; }"
+        )
+
+        rename_action = QAction("Rename", menu)
+        rename_action.triggered.connect(lambda: self._rename_session(session_id))
+        menu.addAction(rename_action)
+
+        edit_action = QAction("Edit Parameters", menu)
+        edit_action.triggered.connect(lambda: self._edit_session_params(session_id))
+        menu.addAction(edit_action)
+
+        menu.addSeparator()
+
+        delete_action = QAction("Delete Session", menu)
+        delete_action.triggered.connect(lambda: self._delete_session(session_id))
+        menu.addAction(delete_action)
+
+        menu.exec(self.session_list.mapToGlobal(pos))
+
+    def _rename_session(self, session_id: str) -> None:
+        from storage.yaml_io import read_yaml
+        meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Session", "New name:", QLineEdit.EchoMode.Normal, meta.name,
+        )
+        if ok and new_name.strip():
+            self.session_panel.edit_session_meta(session_id, name=new_name.strip())
+
+    def _edit_session_params(self, session_id: str) -> None:
+        from storage.yaml_io import read_yaml
+        meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Edit Session Parameters")
+        dlg.setMinimumWidth(420)
+        dlg.setStyleSheet(
+            "QDialog { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; }"
+            "QLabel { color: #94a3b8; font-size: 11.5px; }"
+            "QLineEdit, QSpinBox, QTextEdit {"
+            "  background-color: #0b1120; border: 1px solid #1e293b; border-radius: 6px;"
+            "  padding: 6px 10px; color: #e2e8f0; font-size: 12px; }"
+            "QTextEdit { min-height: 60px; }"
+            "QPushButton {"
+            "  background-color: #1d4ed8; border: none; border-radius: 6px;"
+            "  color: #f8fafc; padding: 6px 16px; font-size: 12px; font-weight: 600; }"
+            "QPushButton:hover { background-color: #2563eb; }"
+        )
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setVerticalSpacing(10)
+
+        name_input = QLineEdit(meta.name)
+        form.addRow(QLabel("Name"), name_input)
+
+        group_input = QLineEdit(meta.group)
+        group_input.setPlaceholderText("e.g. Work, Personal, Experiment")
+        form.addRow(QLabel("Group"), group_input)
+
+        sys_prompt_input = QTextEdit()
+        sys_prompt_input.setPlainText(meta.system_prompt)
+        sys_prompt_input.setPlaceholderText("Optional system prompt override...")
+        sys_prompt_input.setFixedHeight(80)
+        form.addRow(QLabel("System Prompt"), sys_prompt_input)
+
+        ctx_input = QSpinBox()
+        ctx_input.setRange(1, 500)
+        ctx_input.setValue(meta.context_keep_last)
+        form.addRow(QLabel("Context Window"), ctx_input)
+
+        compress_input = QSpinBox()
+        compress_input.setRange(0, 50)
+        compress_input.setValue(meta.compression_interval)
+        form.addRow(QLabel("Compress Every N"), compress_input)
+
+        layout.addLayout(form)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Save")
+        buttons.button(QDialogButtonBox.StandardButton.Cancel).setText("Cancel")
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        self.session_panel.edit_session_meta(
+            session_id,
+            name=name_input.text().strip() or meta.name,
+            group=group_input.text().strip(),
+            system_prompt=sys_prompt_input.toPlainText().strip(),
+            context_keep_last=ctx_input.value(),
+            compression_interval=compress_input.value(),
+        )
+
+    def _delete_session(self, session_id: str) -> None:
+        from storage.yaml_io import read_yaml
+        meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
+        reply = QMessageBox.question(
+            self,
+            "Delete Session",
+            f"Delete session \"{meta.name}\"?\nThis action cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self.session_panel.delete_session(session_id)
 
     # ── Placeholder page ────────────────────────────────────────────────
 

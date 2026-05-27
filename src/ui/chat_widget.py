@@ -176,7 +176,7 @@ class ChatBubbleWidget(QFrame):
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
             self.label.page().setBackgroundColor(Qt.GlobalColor.transparent)
-            self.label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+            self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             self.label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
             self.label.page().loadFinished.connect(self._on_web_loaded)
             base_url = QUrl.fromLocalFile(str(_katex_dir()) + "/")
@@ -192,10 +192,10 @@ class ChatBubbleWidget(QFrame):
                 | Qt.TextInteractionFlag.LinksAccessibleByMouse
             )
             self.label.setMinimumWidth(0)
-            self.label.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+            self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         self.set_content(content, render_latex=True)
-        self.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(12, 8, 12, 8)
@@ -315,6 +315,22 @@ class ChatBubbleWidget(QFrame):
         if page is None:
             return
         page.runJavaScript("getHeight()", self._apply_web_height)
+        page.runJavaScript("getNaturalWidth()", self._apply_web_width)
+
+    def _apply_web_width(self, width: int) -> None:
+        if not isinstance(width, int) or width <= 0:
+            return
+        content_w = width + 24
+        if self._max_width:
+            content_w = min(content_w, self._max_width)
+        content_w = max(120, content_w)
+        try:
+            current = self.minimumWidth()
+        except RuntimeError:
+            return
+        if content_w == current:
+            return
+        self.setMinimumWidth(content_w)
 
     def _apply_web_height(self, height: int) -> None:
         if not isinstance(height, int):
@@ -548,9 +564,33 @@ pre, code {{
 pre {{
   white-space: pre-wrap;
   padding: 12px;
+  padding-top: 28px;
   border-radius: 8px;
   background: rgba(0,0,0,0.3);
   line-height: 1.5;
+  position: relative;
+}}
+.code-copy-btn {{
+  position: absolute;
+  top: 4px; right: 6px;
+  background: rgba(148,163,184,0.12);
+  border: 1px solid rgba(148,163,184,0.18);
+  color: #94a3b8;
+  border-radius: 4px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-family: inherit;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 1;
+}}
+pre:hover .code-copy-btn {{
+  opacity: 1;
+}}
+.code-copy-btn:hover {{
+  background: rgba(148,163,184,0.25);
+  color: #e2e8f0;
 }}
 code {{ background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 4px; }}
 pre code {{ background: none; padding: 0; border-radius: 0; }}
@@ -593,6 +633,7 @@ function setHtml(html, renderLatex) {{
   if (window.hljs) {{
     try {{ hljs.highlightAll(); }} catch(e) {{ console.error(e); }}
   }}
+  addCopyButtons();
   if (renderLatex && window.renderMathInElement) {{
     try {{
       renderMathInElement(content, {{delimiters: delimiters, throwOnError: false}});
@@ -600,8 +641,58 @@ function setHtml(html, renderLatex) {{
   }}
 }}
 
+function addCopyButtons() {{
+  var pres = document.querySelectorAll('#content pre');
+  for (var i = 0; i < pres.length; i++) {{
+    (function(pre) {{
+      if (pre.querySelector('.code-copy-btn')) return;
+      var btn = document.createElement('button');
+      btn.className = 'code-copy-btn';
+      btn.textContent = 'Copy';
+      btn.onclick = function() {{
+        var code = pre.textContent || '';
+        var done = function() {{
+          btn.textContent = 'Copied!';
+          btn.style.color = '#4ade80';
+          setTimeout(function() {{
+            btn.textContent = 'Copy';
+            btn.style.color = '';
+          }}, 2000);
+        }};
+        if (navigator.clipboard && navigator.clipboard.writeText) {{
+          navigator.clipboard.writeText(code).then(done).catch(function() {{ btn.textContent = 'Error'; }});
+        }} else {{
+          var ta = document.createElement('textarea');
+          ta.value = code;
+          ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none;';
+          document.body.appendChild(ta);
+          ta.select();
+          try {{ document.execCommand('copy'); done(); }} catch(e) {{ btn.textContent = 'Error'; }}
+          document.body.removeChild(ta);
+        }}
+      }};
+      pre.appendChild(btn);
+    }})(pres[i]);
+  }}
+}}
+
 function getHeight() {{
   return Math.ceil(document.body.scrollHeight);
+}}
+
+function getNaturalWidth() {{
+  var body = document.body;
+  var oldWs = body.style.whiteSpace;
+  var oldW = body.style.width;
+  var oldMaxW = body.style.maxWidth;
+  body.style.whiteSpace = 'pre';
+  body.style.width = 'auto';
+  body.style.maxWidth = 'none';
+  var w = body.scrollWidth;
+  body.style.whiteSpace = oldWs;
+  body.style.width = oldW;
+  body.style.maxWidth = oldMaxW;
+  return w + 6;
 }}
 </script>
 </head>

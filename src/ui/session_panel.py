@@ -17,11 +17,11 @@ from PyQt6.QtWidgets import (
 from typing import TYPE_CHECKING
 
 from core.agent import Agent
-from core.models import agent_config_from_dict, session_meta_from_dict
+from core.models import agent_config_from_dict, session_meta_from_dict, session_meta_to_dict, utc_now_iso
 from core.session import Session
 from security.vault import Vault
 from storage.file_store import FileStore
-from storage.yaml_io import read_yaml
+from storage.yaml_io import read_yaml, write_yaml
 from ui.chat_widget import ChatBubbleWidget, ChatViewWidget
 from ui.session_create_panel import SessionCreateData, SessionCreateWidget
 
@@ -72,6 +72,7 @@ class ChatWorker(QThread):
 
 class SessionPanel(QWidget):
     sessions_changed = pyqtSignal()
+    session_edited = pyqtSignal(str)  # session_id
 
     def __init__(self, store: FileStore, vault: Vault, show_session_header: bool = True, token_tracker: "TokenTracker | None" = None) -> None:
         super().__init__()
@@ -421,3 +422,25 @@ class SessionPanel(QWidget):
         self.chat_view.scroll_to_bottom()
         QTimer.singleShot(500, self.chat_view._scroll_to_bottom)
         QTimer.singleShot(1000, self.chat_view._scroll_to_bottom)
+
+    def edit_session_meta(self, session_id: str, **kwargs: object) -> None:
+        meta_path = self.store.session_yaml_path(session_id)
+        data = read_yaml(meta_path)
+        meta = session_meta_from_dict(data)
+        for key, value in kwargs.items():
+            if hasattr(meta, key):
+                setattr(meta, key, value)
+        meta.updated_at = utc_now_iso()
+        write_yaml(meta_path, session_meta_to_dict(meta))
+        if self.active_session and self.active_session.meta.id == session_id:
+            for key, value in kwargs.items():
+                if hasattr(self.active_session.meta, key):
+                    setattr(self.active_session.meta, key, value)
+        self.session_edited.emit(session_id)
+
+    def delete_session(self, session_id: str) -> None:
+        if self.active_session and self.active_session.meta.id == session_id:
+            self.active_session = None
+            self.chat_view.clear()
+        Session.delete(session_id, self.store)
+        self.sessions_changed.emit()
