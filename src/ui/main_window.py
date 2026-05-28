@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QPoint
-from PyQt6.QtGui import QFont, QAction
+from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QButtonGroup,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -17,7 +17,6 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
-    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -30,6 +29,7 @@ from PyQt6.QtWidgets import (
 
 from ui.agent_panel import AgentPanel
 from ui.session_panel import SessionPanel
+from ui.session_tree_widget import SessionTreeWidget
 from core.models import agent_config_from_dict, session_meta_from_dict
 from storage.file_store import FileStore
 from security.vault import Vault
@@ -186,18 +186,33 @@ class MainWindow(QMainWindow):
         self.team_add_button.setEnabled(False)
         self.sidebar_stack.addWidget(self._build_list_panel(self.team_list, self.team_add_button))
 
-        self.session_list = QListWidget()
-        self.session_list.setWordWrap(True)
-        self.session_list.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.session_list = SessionTreeWidget(self.store)
         self.session_add_button = QPushButton("+ New Session")
-        self.sidebar_stack.addWidget(self._build_list_panel(self.session_list, self.session_add_button))
+
+        self.group_filter_combo = QComboBox()
+        self.group_filter_combo.setFixedHeight(32)
+
+        session_panel_wrapper = QWidget()
+        sp_layout = QVBoxLayout(session_panel_wrapper)
+        sp_layout.setContentsMargins(0, 0, 0, 0)
+        sp_layout.setSpacing(6)
+        sp_layout.addWidget(self.group_filter_combo)
+        sp_layout.addWidget(self.session_list, stretch=1)
+        sp_layout.addWidget(self.session_add_button)
+        self.sidebar_stack.addWidget(session_panel_wrapper)
 
         layout.addWidget(self.sidebar_stack, stretch=1)
 
         self.tab_group.buttonClicked.connect(lambda btn: self._set_active_tab(self.tab_group.id(btn)))
         self.agent_list.currentItemChanged.connect(self._on_agent_selected)
-        self.session_list.currentItemChanged.connect(self._on_session_selected)
-        self.session_list.customContextMenuRequested.connect(self._on_session_context_menu)
+        self.session_list.session_selected.connect(self._on_session_selected_from_tree)
+        self.session_list.session_rename_requested.connect(self._rename_session)
+        self.session_list.session_edit_requested.connect(self._edit_session_params)
+        self.session_list.session_delete_requested.connect(self._delete_session)
+        self.session_list.group_renamed.connect(lambda old, new: self.refresh_session_list())
+        self.session_list.group_deleted.connect(lambda g: self.refresh_session_list())
+        self.session_list.session_moved.connect(lambda sid, g: self.refresh_session_list())
+        self.group_filter_combo.currentIndexChanged.connect(self._on_group_filter_changed)
         self.agent_add_button.clicked.connect(self._create_agent)
         self.session_add_button.clicked.connect(self._create_session)
 
@@ -259,49 +274,28 @@ class MainWindow(QMainWindow):
             self.agent_list.setCurrentRow(0)
 
     def refresh_session_list(self, select_id: str | None = None) -> None:
-        current_id = select_id
-        if current_id is None:
-            current_item = self.session_list.currentItem()
-            if current_item:
-                current_id = current_item.data(Qt.ItemDataRole.UserRole)
+        if select_id is None:
+            select_id = self.session_list.get_selected_session_id()
 
-        self.session_list.clear()
-        sessions = []
-        for session_id in self.store.list_sessions():
-            meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
-            sessions.append((meta.group or "", meta.updated_at, session_id, meta.name))
-        sessions.sort(key=lambda x: (x[0], x[1]), reverse=True)
+        self.session_list.load_sessions()
 
-        seen_groups: set[str] = set()
-        for group, _, session_id, name in sessions:
-            if group and group not in seen_groups:
-                seen_groups.add(group)
-                header = QListWidgetItem()
-                header.setText(f"  {group.upper()}")
-                header.setData(Qt.ItemDataRole.UserRole, f"__group__{group}")
-                header.setFlags(Qt.ItemFlag.NoItemFlags)
-                header_font = header.font()
-                header_font.setPointSizeF(header_font.pointSizeF() - 2)
-                header_font.setBold(True)
-                header.setFont(header_font)
-                header.setForeground(Qt.GlobalColor.gray)
-                self.session_list.addItem(header)
+        if select_id:
+            self.session_list.set_selected_session(select_id)
 
-            meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(session_id)))
-            display_time = meta.updated_at[:16].replace("T", " ") if meta.updated_at else ""
-            item = QListWidgetItem()
-            item.setText(f"{name}\n  {display_time}")
-            item.setData(Qt.ItemDataRole.UserRole, session_id)
-            font = item.font()
-            font.setPointSizeF(font.pointSizeF() - 1)
-            item.setFont(font)
-            self.session_list.addItem(item)
+        current_filter = self.group_filter_combo.currentData()
+        self.group_filter_combo.blockSignals(True)
+        self.group_filter_combo.clear()
+        self.group_filter_combo.addItem("全部", None)
+        for group_name, count in self.session_list.get_all_groups():
+            label = f"{group_name or '未分组'} ({count})"
+            self.group_filter_combo.addItem(label, group_name)
+        if current_filter is not None:
+            idx = self.group_filter_combo.findData(current_filter)
+            if idx >= 0:
+                self.group_filter_combo.setCurrentIndex(idx)
+        self.group_filter_combo.blockSignals(False)
 
-        if current_id and not current_id.startswith("__group__"):
-            index = next((i for i in range(self.session_list.count())
-                          if self.session_list.item(i).data(Qt.ItemDataRole.UserRole) == current_id), -1)
-            if index >= 0:
-                self.session_list.setCurrentRow(index)
+        self.session_list.filter_by_group(self.group_filter_combo.currentData())
 
     # ── Event handlers ──────────────────────────────────────────────────
 
@@ -313,13 +307,9 @@ class MainWindow(QMainWindow):
             self._set_active_tab(0)
             self.agent_panel.load_agent_by_id(agent_id)
 
-    def _on_session_selected(self, current: QListWidgetItem | None) -> None:
-        if current is None:
-            return
-        session_id = current.data(Qt.ItemDataRole.UserRole)
-        if session_id and not session_id.startswith("__group__"):
-            self._set_active_tab(2)
-            self.session_panel.load_session_by_id(session_id)
+    def _on_session_selected_from_tree(self, session_id: str) -> None:
+        self._set_active_tab(2)
+        self.session_panel.load_session_by_id(session_id)
 
     def _create_agent(self) -> None:
         new_id = self.agent_panel.create_agent()
@@ -343,39 +333,11 @@ class MainWindow(QMainWindow):
     def _on_session_edited(self, session_id: str) -> None:
         self.refresh_session_list(select_id=session_id)
 
-    # ── Session context menu ──────────────────────────────────────────
+    # ── Group filter ───────────────────────────────────────────────────
 
-    def _on_session_context_menu(self, pos: QPoint) -> None:
-        item = self.session_list.itemAt(pos)
-        if item is None:
-            return
-        session_id = item.data(Qt.ItemDataRole.UserRole)
-        if not session_id or session_id.startswith("__group__"):
-            return
-
-        menu = QMenu(self)
-        menu.setStyleSheet(
-            "QMenu { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 4px; color: #e2e8f0; }"
-            "QMenu::item { padding: 6px 20px; border-radius: 4px; }"
-            "QMenu::item:selected { background-color: #1d4ed8; }"
-            "QMenu::separator { height: 1px; background: #1e293b; margin: 4px 8px; }"
-        )
-
-        rename_action = QAction("Rename", menu)
-        rename_action.triggered.connect(lambda: self._rename_session(session_id))
-        menu.addAction(rename_action)
-
-        edit_action = QAction("Edit Parameters", menu)
-        edit_action.triggered.connect(lambda: self._edit_session_params(session_id))
-        menu.addAction(edit_action)
-
-        menu.addSeparator()
-
-        delete_action = QAction("Delete Session", menu)
-        delete_action.triggered.connect(lambda: self._delete_session(session_id))
-        menu.addAction(delete_action)
-
-        menu.exec(self.session_list.mapToGlobal(pos))
+    def _on_group_filter_changed(self, index: int) -> None:
+        group_name = self.group_filter_combo.currentData()
+        self.session_list.filter_by_group(group_name)
 
     def _rename_session(self, session_id: str) -> None:
         from storage.yaml_io import read_yaml
