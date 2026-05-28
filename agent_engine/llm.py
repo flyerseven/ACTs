@@ -40,8 +40,14 @@ class LLMAdapter(ABC):
         self,
         messages: list[dict],
         tools: list[dict] | None = None,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> LLMResponse:
-        """Send messages and return a complete response."""
+        """Send messages and return a complete response.
+
+        If on_chunk is provided, it is called with each text chunk
+        as it arrives (streaming), while still returning the complete
+        response with tool calls at the end.
+        """
         ...
 
     async def chat_stream(
@@ -64,15 +70,18 @@ class CallbackAdapter(LLMAdapter):
     def __init__(self, chat_fn: Callable):
         self._chat_fn = chat_fn
 
-    async def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
+    async def chat(self, messages: list[dict], tools: list[dict] | None = None, on_chunk: Callable[[str], None] | None = None) -> LLMResponse:
         result = self._chat_fn(messages, tools)
         if hasattr(result, "__aiter__"):
-            # It's an async generator — collect all chunks
             content = ""
             async for chunk in result:
                 content += chunk
+                if on_chunk:
+                    on_chunk(chunk)
             return LLMResponse(content=content)
         content = await result
+        if on_chunk:
+            on_chunk(content)
         return LLMResponse(content=content)
 
     async def chat_stream(self, messages: list[dict], tools: list[dict] | None = None) -> AsyncGenerator[str, None]:
@@ -118,7 +127,10 @@ class OpenAIAdapter(LLMAdapter):
             )
         return self._client
 
-    async def chat(self, messages: list[dict], tools: list[dict] | None = None) -> LLMResponse:
+    async def chat(self, messages: list[dict], tools: list[dict] | None = None, on_chunk: Callable[[str], None] | None = None) -> LLMResponse:
+        if on_chunk is not None:
+            return await self._chat_streaming_with_tools(messages, tools, on_chunk)
+
         payload: dict = {
             "model": self.model,
             "messages": messages,
@@ -172,6 +184,84 @@ class OpenAIAdapter(LLMAdapter):
                     continue
 
         raise RuntimeError(f"OpenAIAdapter: all {self.max_retries + 1} attempts failed. Last error: {last_error}")
+
+    async def _chat_streaming_with_tools(
+        self,
+        messages: list[dict],
+        tools: list[dict] | None,
+        on_chunk: Callable[[str], None],
+    ) -> LLMResponse:
+        """Stream response chunks via on_chunk while accumulating full content
+        and extracting tool calls from streamed deltas."""
+        import json
+
+        payload: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+        }
+        if tools:
+            payload["tools"] = [{"type": "function", "function": t} for t in tools]
+            payload["tool_choice"] = "auto"
+
+        client = await self._get_client()
+        content_parts: list[str] = []
+        tool_call_deltas: dict[int, dict] = {}
+        usage_data: dict = {}
+
+        async with client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line.startswith("data: "):
+                    continue
+                data_str = line[6:]
+                if data_str == "[DONE]":
+                    break
+                try:
+                    data = json.loads(data_str)
+                    delta = data["choices"][0].get("delta", {})
+
+                    content_delta = delta.get("content", "")
+                    if content_delta:
+                        content_parts.append(content_delta)
+                        on_chunk(content_delta)
+
+                    tc_deltas = delta.get("tool_calls", [])
+                    for tc in tc_deltas:
+                        idx = tc.get("index", 0)
+                        if idx not in tool_call_deltas:
+                            tool_call_deltas[idx] = {"id": "", "name": "", "arguments_str": ""}
+                        if "id" in tc and tc["id"]:
+                            tool_call_deltas[idx]["id"] = tc["id"]
+                        func = tc.get("function", {})
+                        if "name" in func and func["name"]:
+                            tool_call_deltas[idx]["name"] = func["name"]
+                        if "arguments" in func and func["arguments"]:
+                            tool_call_deltas[idx]["arguments_str"] += func["arguments"]
+
+                    if data.get("usage"):
+                        usage_data = data["usage"]
+                except (json.JSONDecodeError, KeyError, IndexError):
+                    continue
+
+        tool_calls: list[ToolCallRequest] = []
+        for idx in sorted(tool_call_deltas.keys()):
+            tc_data = tool_call_deltas[idx]
+            try:
+                args = json.loads(tc_data["arguments_str"])
+            except json.JSONDecodeError:
+                args = {}
+            tool_calls.append(ToolCallRequest(
+                id=tc_data["id"],
+                name=tc_data["name"],
+                arguments=args,
+            ))
+
+        return LLMResponse(
+            content="".join(content_parts),
+            tool_calls=tool_calls,
+            usage=usage_data,
+        )
 
     async def chat_stream(self, messages: list[dict], tools: list[dict] | None = None) -> AsyncGenerator[str, None]:
         payload: dict = {
