@@ -130,12 +130,25 @@ class AgentEngine:
                     tool_call = await self.tools.call(tc_req.name, tc_req.arguments)
                     step.tool_call = tool_call
 
+                    self.observer.emit(Event("tool_call", {
+                        "index": step_index,
+                        "name": tc_req.name,
+                        "arguments": tc_req.arguments,
+                    }))
+
                     if tool_call.error:
                         step.observation = f"Tool error: {tool_call.error}"
                         self.state.record_error(tool_call.error)
                     else:
                         step.observation = str(tool_call.result)[:1000]
                         self.memory.add("tool", step.observation, name=tc_req.name)
+
+                    self.observer.emit(Event("tool_result", {
+                        "index": step_index,
+                        "result": step.observation,
+                        "error": tool_call.error or "",
+                        "duration_ms": tool_call.duration_ms,
+                    }))
 
                     self.safety._run_hooks("after_action", tc_req.name, tool_call.result, tool_call.error)
                     self.state.update_metrics(tool_calls=1)
@@ -147,6 +160,11 @@ class AgentEngine:
                 step.phase = "reflect"
                 reflection = await self.reflector.reflect(self.state.state, self.memory, self.llm)
                 step.reflection = reflection.summary
+                self.observer.emit(Event("reflection", {
+                    "index": step_index,
+                    "summary": reflection.summary,
+                    "is_stuck": reflection.is_stuck,
+                }))
                 if reflection.is_stuck:
                     logger.warning(f"Agent appears stuck: {reflection.summary}")
                     self.state.record_error(f"Stuck: {reflection.summary}")

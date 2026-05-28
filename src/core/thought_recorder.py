@@ -62,36 +62,41 @@ class ThoughtRecorder(QObject):
         logger.info(f"Agent run started. Goal: {goal}")
         self.run_started.emit(goal)
 
-    def on_thought_chunk(self, index: int, chunk: str) -> None:
+    def _ensure_step(self, index: int, phase: str = "think") -> StepSnapshot:
+        """Return the StepSnapshot for *index*, creating one if missing (I3)."""
         if self._current_step is None or self._current_step.index != index:
-            self._current_step = StepSnapshot(index=index, phase="think")
+            self._current_step = StepSnapshot(index=index, phase=phase)
             self._steps.append(self._current_step)
-            logger.info(f"  Step {index} — THINK")
+            logger.info(f"  Step {index} — {phase.upper()}")
             self.step_started.emit(index)
-        self._current_step.thought += chunk
-        self._current_step.thought_streaming = True
+        return self._current_step
+
+    def on_thought_chunk(self, index: int, chunk: str) -> None:
+        step = self._ensure_step(index, "think")
+        step.thought += chunk
+        step.thought_streaming = True
         self.thought_chunk.emit(index, chunk)
 
     def on_thought_done(self, index: int, full_text: str) -> None:
-        if self._current_step and self._current_step.index == index:
-            self._current_step.thought = full_text
-            self._current_step.thought_streaming = False
+        step = self._ensure_step(index, "think")
+        step.thought = full_text
+        step.thought_streaming = False
         logger.info(f"  Step {index} — THINK complete ({len(full_text)} chars)")
         self.thought_done.emit(index, full_text)
 
     def on_tool_call(self, index: int, tool_name: str, args: dict) -> None:
-        if self._current_step and self._current_step.index == index:
-            self._current_step.tool_name = tool_name
-            self._current_step.tool_args = args
-            self._current_step.phase = "act"
+        step = self._ensure_step(index, "act")
+        step.tool_name = tool_name
+        step.tool_args = args
+        step.phase = "act"
         logger.info(f"  Step {index} — ACT: {tool_name}({json.dumps(args, ensure_ascii=False)})")
         self.tool_call_started.emit(index, tool_name, json.dumps(args, ensure_ascii=False))
 
     def on_tool_result(self, index: int, result: str, error: str, duration_ms: float) -> None:
-        if self._current_step and self._current_step.index == index:
-            self._current_step.tool_result = result
-            self._current_step.tool_error = error
-            self._current_step.tool_duration_ms = duration_ms
+        step = self._ensure_step(index, "act")
+        step.tool_result = result
+        step.tool_error = error
+        step.tool_duration_ms = duration_ms
         if error:
             logger.error(f"  Step {index} — Tool error: {error}")
         else:
@@ -99,10 +104,10 @@ class ThoughtRecorder(QObject):
         self.tool_result.emit(index, result, error, duration_ms)
 
     def on_reflection(self, index: int, summary: str, is_stuck: bool) -> None:
-        if self._current_step and self._current_step.index == index:
-            self._current_step.phase = "reflect"
-            self._current_step.reflection = summary
-            self._current_step.is_stuck = is_stuck
+        step = self._ensure_step(index, "reflect")
+        step.phase = "reflect"
+        step.reflection = summary
+        step.is_stuck = is_stuck
         if is_stuck:
             logger.warning(f"  Step {index} — REFLECT: stuck — {summary}")
         else:
@@ -110,8 +115,8 @@ class ThoughtRecorder(QObject):
         self.reflection_done.emit(index, summary, is_stuck)
 
     def on_step_end(self, index: int, is_completed: bool) -> None:
-        if self._current_step and self._current_step.index == index:
-            self._current_step.is_completed = is_completed
+        step = self._ensure_step(index, "think")
+        step.is_completed = is_completed
         logger.info(f"  Step {index} — {'COMPLETED' if is_completed else 'NEXT'}")
         self.step_ended.emit(index, is_completed)
 

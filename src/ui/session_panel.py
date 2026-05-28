@@ -32,6 +32,11 @@ from storage.yaml_io import read_yaml, write_yaml
 from ui.chat_widget import ChatBubbleWidget, ChatViewWidget
 from ui.session_create_panel import SessionCreateData, SessionCreateWidget
 
+from agent_engine.engine import AgentEngine
+from agent_engine.config import EngineConfig
+from agent_engine.tools import ToolRegistry
+from agent_engine.llm import OpenAIAdapter
+
 if TYPE_CHECKING:
     from core.token_tracker import TokenTracker
 
@@ -136,6 +141,7 @@ class EngineWorker(QThread):
     """Runs AgentEngine in background with streaming thought chunks."""
 
     thought_chunk = pyqtSignal(int, str)
+    thought_done = pyqtSignal(int, str)
     tool_call_signal = pyqtSignal(int, str, str)
     tool_result_signal = pyqtSignal(int, str, str, float)
     reflection_signal = pyqtSignal(int, str, bool)
@@ -163,11 +169,6 @@ class EngineWorker(QThread):
             self.engine_failed.emit(str(exc))
 
     async def _task(self) -> None:
-        from agent_engine.engine import AgentEngine
-        from agent_engine.config import EngineConfig
-        from agent_engine.tools import ToolRegistry
-        from agent_engine.llm import OpenAIAdapter
-
         config = agent_config_from_dict(read_yaml(
             self.store.agent_yaml_path(self.agent_id)))
         api_key = self.vault.resolve_key_ref(config.model.api_key_ref)
@@ -210,24 +211,33 @@ class EngineWorker(QThread):
                 self.step_end_signal.emit(step_index, False)
             elif event.type == "done":
                 self.step_end_signal.emit(step_index, True)
+            elif event.type == "stopped":
+                self.step_end_signal.emit(step_index, False)
+            elif event.type == "tool_call":
+                self.tool_call_signal.emit(
+                    event.data["index"],
+                    event.data["name"],
+                    json.dumps(event.data["arguments"], ensure_ascii=False))
+            elif event.type == "tool_result":
+                self.tool_result_signal.emit(
+                    event.data["index"],
+                    event.data["result"],
+                    event.data.get("error", ""),
+                    event.data.get("duration_ms", 0.0))
+            elif event.type == "reflection":
+                self.reflection_signal.emit(
+                    event.data["index"],
+                    event.data["summary"],
+                    event.data.get("is_stuck", False))
 
         engine.observer.emit = patched_emit
 
         state = await engine.run(self.content, on_thought_chunk=on_chunk)
 
+        # Emit thought_done for each step that has thought text (M1)
         for step in state.steps:
-            idx = step.index
-            if step.tool_call:
-                self.tool_call_signal.emit(
-                    idx, step.tool_call.tool_name,
-                    json.dumps(step.tool_call.arguments, ensure_ascii=False))
-                self.tool_result_signal.emit(
-                    idx, step.observation or "",
-                    step.tool_call.error or "",
-                    step.tool_call.duration_ms)
-            if step.reflection:
-                is_stuck = "stuck" in step.reflection.lower()
-                self.reflection_signal.emit(idx, step.reflection, is_stuck)
+            if step.thought:
+                self.thought_done.emit(step.index, step.thought)
 
         reply_parts = []
         for step in state.steps:
@@ -662,6 +672,8 @@ class SessionPanel(QWidget):
             self._thought_recorder.start_run)
         self._engine_worker.thought_chunk.connect(
             self._thought_recorder.on_thought_chunk)
+        self._engine_worker.thought_done.connect(
+            self._thought_recorder.on_thought_done)
         self._engine_worker.tool_call_signal.connect(
             lambda idx, name, args: self._thought_recorder.on_tool_call(
                 idx, name, json.loads(args)))
