@@ -154,7 +154,7 @@ class ChatBubbleWidget(QFrame):
         super().__init__()
         self.role = role
         self._max_width: int | None = None
-        self._text_color = "#f8fafc"
+        self._text_color = "#e0e0e0"
         self._render_latex = True
         self._use_web = _HAS_WEBENGINE and _katex_available()
         self._web_ready = False
@@ -379,10 +379,10 @@ class ChatBubbleWidget(QFrame):
     @staticmethod
     def _bg_for_role(role: str) -> str:
         if role == "user":
-            return "#1d4ed8"
+            return "#007acc"
         if role == "assistant":
-            return "#111827"
-        return "#0f172a"
+            return "#2d2d2d"
+        return "#252526"
 
     @staticmethod
     def _avatar_text(role: str) -> str:
@@ -402,20 +402,20 @@ class ChatBubbleWidget(QFrame):
 
     def _apply_role_style(self, role: str) -> None:
         if role == "user":
-            bg = "#1d4ed8"
-            fg = "#eff6ff"
-            border = "#2563eb"
-            avatar_bg = "#3b82f6"
+            bg = "#007acc"
+            fg = "#e0e0e0"
+            border = "#0098ff"
+            avatar_bg = "#4fc1ff"
         elif role == "assistant":
-            bg = "#111827"
-            fg = "#e2e8f0"
-            border = "#1e293b"
-            avatar_bg = "#334155"
+            bg = "#2d2d2d"
+            fg = "#cccccc"
+            border = "#3c3c3c"
+            avatar_bg = "#424242"
         else:
-            bg = "#0f172a"
-            fg = "#94a3b8"
-            border = "#1e293b"
-            avatar_bg = "#1e293b"
+            bg = "#252526"
+            fg = "#858585"
+            border = "#3c3c3c"
+            avatar_bg = "#2d2d2d"
 
         self.setStyleSheet(
             "QFrame {"
@@ -438,10 +438,10 @@ class ChatBubbleWidget(QFrame):
                 "font-size: 12.5px;"
                 "line-height: 1.6;"
                 "}"
-                "QTextBrowser a { color: #60a5fa; }"
+                "QTextBrowser a { color: #4fc1ff; }"
                 "QTextBrowser code { background: rgba(0,0,0,0.25); padding: 2px 5px; border-radius: 4px; font-size: 11.5px; }"
                 "QTextBrowser pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 11.5px; }"
-                "QTextBrowser blockquote { color: #94a3b8; border-left: 3px solid #334155; margin: 6px 0; padding: 4px 10px; }"
+                "QTextBrowser blockquote { color: #858585; border-left: 3px solid #424242; margin: 6px 0; padding: 4px 10px; }"
             )
         self.avatar.setStyleSheet(
             "QLabel {"
@@ -455,7 +455,7 @@ class ChatBubbleWidget(QFrame):
         self.copy_button.setStyleSheet(
             "QPushButton {"
             "background: transparent;"
-            f"color: #64748b;"
+            f"color: #6a6a6a;"
             "border: 1px solid transparent;"
             "border-radius: 4px;"
             "padding: 2px 8px;"
@@ -642,7 +642,7 @@ pre {{
   top: 4px; right: 6px;
   background: rgba(148,163,184,0.12);
   border: 1px solid rgba(148,163,184,0.18);
-  color: #94a3b8;
+  color: #858585;
   border-radius: 4px;
   padding: 2px 8px;
   font-size: 10px;
@@ -656,8 +656,8 @@ pre:hover .code-copy-btn {{
   opacity: 1;
 }}
 .code-copy-btn:hover {{
-  background: rgba(148,163,184,0.25);
-  color: #e2e8f0;
+  background: rgba(204,204,204,0.15);
+  color: #cccccc;
 }}
 code {{ background: rgba(0,0,0,0.2); padding: 2px 5px; border-radius: 4px; }}
 pre code {{ background: none; padding: 0; border-radius: 0; }}
@@ -665,17 +665,17 @@ table {{ border-collapse: collapse; width: 100%; }}
 th, td {{ border: 1px solid rgba(148,163,184,0.2); padding: 6px 10px; text-align: left; }}
 th {{ background: rgba(0,0,0,0.2); font-weight: 600; }}
 blockquote {{
-  color: #94a3b8;
-  border-left: 3px solid #3b82f6;
+  color: #858585;
+  border-left: 3px solid #007acc;
   margin: 8px 0;
   padding: 2px 12px;
 }}
 img {{ max-width: 100%; border-radius: 6px; }}
-a {{ color: #60a5fa; text-decoration: none; }}
+a {{ color: #4fc1ff; text-decoration: none; }}
 a:hover {{ text-decoration: underline; }}
 .katex-display {{ overflow-x: auto; overflow-y: hidden; padding: 4px 0; }}
 .katex {{ font-size: 1.05em; }}
-hr {{ border: none; border-top: 1px solid #1e293b; margin: 12px 0; }}
+hr {{ border: none; border-top: 1px solid #3c3c3c; margin: 12px 0; }}
 ul, ol {{ padding-left: 1.5em; }}
 li {{ margin: 2px 0; }}
 h1, h2, h3, h4 {{ margin: 12px 0 4px 0; font-weight: 600; line-height: 1.3; }}
@@ -691,7 +691,7 @@ h3 {{ font-size: 1.05em; }}
 .loading-dots span {{
   width: 7px;
   height: 7px;
-  background: #64748b;
+  background: #6a6a6a;
   border-radius: 50%;
   animation: dot-bounce 1.4s ease-in-out infinite both;
 }}

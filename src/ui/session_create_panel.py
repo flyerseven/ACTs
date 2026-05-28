@@ -40,17 +40,17 @@ class SessionCreateWidget(QWidget):
 
         # Page header
         title = QLabel("Create New Session")
-        title.setStyleSheet("font-size: 17px; font-weight: 700; color: #f8fafc;")
+        title.setStyleSheet("font-size: 17px; font-weight: 700; color: #e0e0e0;")
         layout.addWidget(title)
 
         subtitle = QLabel("Start a new conversation with an AI agent.")
-        subtitle.setStyleSheet("color: #64748b; font-size: 11.5px; margin-top: 2px; margin-bottom: 20px;")
+        subtitle.setStyleSheet("color: #6a6a6a; font-size: 11.5px; margin-top: 2px; margin-bottom: 20px;")
         layout.addWidget(subtitle)
 
         # Settings card
         card = QFrame()
         card.setObjectName("card")
-        card.setStyleSheet("QFrame#card { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; padding: 0; }")
+        card.setStyleSheet("QFrame#card { background-color: #252526; border: 1px solid #3c3c3c; border-radius: 12px; padding: 0; }")
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(20, 16, 20, 16)
         card_layout.setSpacing(0)
@@ -106,7 +106,7 @@ class SessionCreateWidget(QWidget):
     @staticmethod
     def _fl(text: str) -> QLabel:
         label = QLabel(text)
-        label.setStyleSheet("color: #94a3b8; font-size: 11.5px; min-width: 120px;")
+        label.setStyleSheet("color: #858585; font-size: 11.5px; min-width: 120px;")
         return label
 
     def set_agents(self, agents: list[tuple[str, str]]) -> None:

@@ -163,7 +163,7 @@ class SessionPanel(QWidget):
         toolbar = QFrame()
         toolbar.setFixedHeight(48)
         toolbar.setStyleSheet(
-            "QFrame { background-color: #0b1120; border-bottom: 1px solid #1e293b; }"
+            "QFrame { background-color: #252526; border-bottom: 1px solid #3c3c3c; }"
         )
         toolbar_layout = QHBoxLayout(toolbar)
         toolbar_layout.setContentsMargins(16, 0, 16, 0)
@@ -171,7 +171,7 @@ class SessionPanel(QWidget):
 
         if show_session_header:
             session_label = QLabel("Session")
-            session_label.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
+            session_label.setStyleSheet("color: #6a6a6a; font-size: 11px; font-weight: 600;")
             toolbar_layout.addWidget(session_label)
 
             self.session_combo = QComboBox()
@@ -186,12 +186,12 @@ class SessionPanel(QWidget):
 
             sep = QFrame()
             sep.setFrameShape(QFrame.Shape.VLine)
-            sep.setStyleSheet("background-color: #1e293b; max-width: 1px; border: none;")
+            sep.setStyleSheet("background-color: #3c3c3c; max-width: 1px; border: none;")
             sep.setFixedHeight(20)
             toolbar_layout.addWidget(sep)
 
         agent_label = QLabel("Agent")
-        agent_label.setStyleSheet("color: #64748b; font-size: 11px; font-weight: 600;")
+        agent_label.setStyleSheet("color: #6a6a6a; font-size: 11px; font-weight: 600;")
         toolbar_layout.addWidget(agent_label)
 
         self.agent_combo = QComboBox()
@@ -214,7 +214,7 @@ class SessionPanel(QWidget):
         # Input bar
         input_bar = QFrame()
         input_bar.setStyleSheet(
-            "QFrame { background-color: #0b1120; border-top: 1px solid #1e293b; }"
+            "QFrame { background-color: #252526; border-top: 1px solid #3c3c3c; }"
         )
         input_layout = QHBoxLayout(input_bar)
         input_layout.setContentsMargins(16, 10, 16, 10)
@@ -225,15 +225,15 @@ class SessionPanel(QWidget):
         self.input_box.setFixedHeight(60)
         self.input_box.setStyleSheet(
             "QPlainTextEdit {"
-            "background-color: #0f172a;"
-            "border: 1px solid #1e293b;"
+            "background-color: #3c3c3c;"
+            "border: 1px solid #3c3c3c;"
             "border-radius: 10px;"
             "padding: 10px 14px;"
-            "color: #e2e8f0;"
+            "color: #cccccc;"
             "font-size: 12.5px;"
             "}"
             "QPlainTextEdit:focus {"
-            "border-color: #3b82f6;"
+            "border-color: #007acc;"
             "}"
         )
         input_layout.addWidget(self.input_box, stretch=1)
@@ -496,7 +496,7 @@ class SessionPanel(QWidget):
         self._hide_load_spinner()
 
         spinner = QFrame(self._chat_page)
-        spinner.setStyleSheet("background-color: #0b1120; border: none;")
+        spinner.setStyleSheet("background-color: #1e1e1e; border: none;")
         spinner.setGeometry(self._chat_page.rect())
         spinner.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
 
@@ -510,7 +510,7 @@ class SessionPanel(QWidget):
         label = QLabel("Loading")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         label.setStyleSheet(
-            "color: #94a3b8; font-size: 13px; background: transparent; border: none;"
+            "color: #858585; font-size: 13px; background: transparent; border: none;"
         )
         layout.addWidget(label)
 
@@ -545,7 +545,7 @@ class SessionPanel(QWidget):
             mask = self._load_spinner
         else:
             mask = QFrame(self._chat_page)
-            mask.setStyleSheet("background-color: #0b1120; border: none;")
+            mask.setStyleSheet("background-color: #1e1e1e; border: none;")
             mask.setGeometry(self.chat_view.geometry())
             mask.show()
             mask.raise_()

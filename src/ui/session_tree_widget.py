@@ -51,9 +51,9 @@ class SessionTreeWidget(QTreeWidget):
 
         self.setStyleSheet("""
             QTreeWidget {
-                background-color: #0f172a;
-                color: #e2e8f0;
-                border: 1px solid #1e293b;
+                background-color: #252526;
+                color: #cccccc;
+                border: 1px solid #3c3c3c;
                 border-radius: 8px;
                 padding: 4px;
                 outline: none;
@@ -63,13 +63,13 @@ class SessionTreeWidget(QTreeWidget):
                 margin: 1px 0px;
             }
             QTreeWidget::item:hover {
-                background-color: #1e293b;
-                color: #f1f5f9;
+                background-color: #2a2d2e;
+                color: #e0e0e0;
             }
             QTreeWidget::item:selected {
-                background-color: #1d4ed8;
+                background-color: #264f78;
                 border-radius: 4px;
-                color: #f8fafc;
+                color: #e0e0e0;
             }
         """)
 
@@ -112,11 +112,11 @@ class SessionTreeWidget(QTreeWidget):
             if group_name:
                 group_item.setText(0, f"{group_name} ({len(sessions)})")
                 group_item.setData(0, Qt.ItemDataRole.UserRole, f"__group__{group_name}")
-                group_item.setForeground(0, QColor("#94a3b8"))
+                group_item.setForeground(0, QColor("#858585"))
             else:
                 group_item.setText(0, f"未分组 ({len(sessions)})")
                 group_item.setData(0, Qt.ItemDataRole.UserRole, "__group__")
-                group_item.setForeground(0, QColor("#64748b"))
+                group_item.setForeground(0, QColor("#6a6a6a"))
 
             for session_id, name, display_time in sessions:
                 session_item = QTreeWidgetItem(group_item)
@@ -205,10 +205,10 @@ class SessionTreeWidget(QTreeWidget):
 
     def _menu_stylesheet(self) -> str:
         return (
-            "QMenu { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 4px; color: #e2e8f0; }"
+            "QMenu { background-color: #252526; border: 1px solid #3c3c3c; border-radius: 8px; padding: 4px; color: #cccccc; }"
             "QMenu::item { padding: 6px 20px; border-radius: 4px; }"
-            "QMenu::item:selected { background-color: #1d4ed8; }"
-            "QMenu::separator { height: 1px; background: #1e293b; margin: 4px 8px; }"
+            "QMenu::item:selected { background-color: #264f78; }"
+            "QMenu::separator { height: 1px; background: #3c3c3c; margin: 4px 8px; }"
         )
 
     def _show_group_context_menu(self, item: QTreeWidgetItem, item_id: str, pos: QPoint) -> None:

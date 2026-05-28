@@ -102,7 +102,7 @@ class MainWindow(QMainWindow):
         logo = QLabel()
         logo.setFixedSize(18, 18)
         logo.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #8b5cf6);"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #007acc, stop:1 #0098ff);"
             "border-radius: 4px;"
         )
         layout.addWidget(logo)
@@ -130,7 +130,7 @@ class MainWindow(QMainWindow):
             from PyQt6.QtWebEngineWidgets import QWebEngineView
             self._web_warmup = QWebEngineView(self)
             self._web_warmup.setVisible(False)
-            self._web_warmup.setHtml("<html><body style='background:#0f172a;'></body></html>")
+            self._web_warmup.setHtml("<html><body style='background:#252526;'></body></html>")
         except Exception:
             pass
 
@@ -140,7 +140,7 @@ class MainWindow(QMainWindow):
         sidebar = QWidget()
         sidebar.setMinimumWidth(220)
         sidebar.setMaximumWidth(280)
-        sidebar.setStyleSheet("QWidget { background-color: #0b1120; }")
+        sidebar.setStyleSheet("QWidget { background-color: #252526; }")
 
         layout = QVBoxLayout(sidebar)
         layout.setContentsMargins(10, 10, 10, 10)
@@ -150,7 +150,7 @@ class MainWindow(QMainWindow):
         tab_container = QWidget()
         tab_container.setFixedHeight(36)
         tab_container.setStyleSheet(
-            "QWidget { background-color: #0f172a; border-radius: 10px; }"
+            "QWidget { background-color: #2d2d2d; border-radius: 10px; }"
         )
         tab_row = QHBoxLayout(tab_container)
         tab_row.setContentsMargins(3, 3, 3, 3)
@@ -355,16 +355,16 @@ class MainWindow(QMainWindow):
         dlg.setWindowTitle("Edit Session Parameters")
         dlg.setMinimumWidth(420)
         dlg.setStyleSheet(
-            "QDialog { background-color: #0f172a; border: 1px solid #1e293b; border-radius: 12px; }"
-            "QLabel { color: #94a3b8; font-size: 11.5px; }"
+            "QDialog { background-color: #252526; border: 1px solid #3c3c3c; border-radius: 12px; }"
+            "QLabel { color: #858585; font-size: 11.5px; }"
             "QLineEdit, QSpinBox, QTextEdit {"
-            "  background-color: #0b1120; border: 1px solid #1e293b; border-radius: 6px;"
-            "  padding: 6px 10px; color: #e2e8f0; font-size: 12px; }"
+            "  background-color: #3c3c3c; border: 1px solid #3c3c3c; border-radius: 6px;"
+            "  padding: 6px 10px; color: #cccccc; font-size: 12px; }"
             "QTextEdit { min-height: 60px; }"
             "QPushButton {"
-            "  background-color: #1d4ed8; border: none; border-radius: 6px;"
-            "  color: #f8fafc; padding: 6px 16px; font-size: 12px; font-weight: 600; }"
-            "QPushButton:hover { background-color: #2563eb; }"
+            "  background-color: #007acc; border: none; border-radius: 6px;"
+            "  color: #e0e0e0; padding: 6px 16px; font-size: 12px; font-weight: 600; }"
+            "QPushButton:hover { background-color: #0098ff; }"
         )
 
         layout = QVBoxLayout(dlg)
@@ -442,9 +442,9 @@ class MainWindow(QMainWindow):
         icon.setFixedSize(48, 48)
         icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         icon.setStyleSheet(
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #3b82f6, stop:1 #8b5cf6);"
+            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #007acc, stop:1 #0098ff);"
             "border-radius: 12px;"
-            "color: #f8fafc;"
+            "color: #e0e0e0;"
             "font-size: 20px;"
             "font-weight: bold;"
         )
@@ -452,7 +452,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(icon, alignment=Qt.AlignmentFlag.AlignCenter)
 
         label = QLabel(text)
-        label.setStyleSheet("color: #64748b; font-size: 13px; margin-top: 12px;")
+        label.setStyleSheet("color: #6a6a6a; font-size: 13px; margin-top: 12px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(label)
         return frame

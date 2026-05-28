@@ -53,11 +53,11 @@ class AgentPanel(QWidget):
 
         # ── Page header ──
         self.page_title = QLabel("Agent Configuration")
-        self.page_title.setStyleSheet("font-size: 17px; font-weight: 700; color: #f8fafc;")
+        self.page_title.setStyleSheet("font-size: 17px; font-weight: 700; color: #e0e0e0;")
         detail_layout.addWidget(self.page_title)
 
         self.page_subtitle = QLabel("Configure an AI agent with its model, provider, and behavior.")
-        self.page_subtitle.setStyleSheet("color: #64748b; font-size: 11.5px; margin-top: 2px; margin-bottom: 20px;")
+        self.page_subtitle.setStyleSheet("color: #6a6a6a; font-size: 11.5px; margin-top: 2px; margin-bottom: 20px;")
         detail_layout.addWidget(self.page_subtitle)
 
         # ── Identity section ──
@@ -194,7 +194,7 @@ class AgentPanel(QWidget):
     def _section_divider() -> QHBoxLayout:
         line = QFrame()
         line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background-color: #1e293b; max-height: 1px; border: none; margin: 4px 0 8px 0;")
+        line.setStyleSheet("background-color: #3c3c3c; max-height: 1px; border: none; margin: 4px 0 8px 0;")
         layout = QHBoxLayout()
         layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(line)
@@ -203,7 +203,7 @@ class AgentPanel(QWidget):
     @staticmethod
     def _form_label(text: str) -> QLabel:
         label = QLabel(text)
-        label.setStyleSheet("color: #94a3b8; font-size: 11.5px; min-width: 100px;")
+        label.setStyleSheet("color: #858585; font-size: 11.5px; min-width: 100px;")
         return label
 
     # ── Agent CRUD ──────────────────────────────────────────────────────
