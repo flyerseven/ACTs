@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QFrame,
@@ -25,6 +26,7 @@ class SessionCreateData:
     context_window: int
     compress_every: int
     system_prompt: str
+    allow_agent_switch: bool = True
 
 
 class SessionCreateWidget(QWidget):
@@ -76,8 +78,16 @@ class SessionCreateWidget(QWidget):
         self.system_prompt_input.setPlaceholderText("Optional system prompt override...")
         self.system_prompt_input.setFixedHeight(100)
 
+        self.allow_switch_checkbox = QCheckBox("Allow switching Agent during session")
+        self.allow_switch_checkbox.setChecked(True)
+        self.allow_switch_checkbox.setStyleSheet(
+            "QCheckBox { color: #c0c0c0; font-size: 11.5px; spacing: 8px; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; }"
+        )
+
         form.addRow(self._fl("Session Name"), self.name_input)
         form.addRow(self._fl("Agent"), self.agent_combo)
+        form.addRow(self._fl(""), self.allow_switch_checkbox)
         form.addRow(self._fl("Context Window"), self.context_window_input)
         form.addRow(self._fl("Compress Every N"), self.compress_every_input)
         form.addRow(self._fl("System Prompt"), self.system_prompt_input)
@@ -121,6 +131,7 @@ class SessionCreateWidget(QWidget):
         self.context_window_input.setValue(100)
         self.compress_every_input.setValue(10)
         self.system_prompt_input.clear()
+        self.allow_switch_checkbox.setChecked(True)
 
     def _on_create(self) -> None:
         name = self.name_input.text().strip() or "New Session"
@@ -131,5 +142,6 @@ class SessionCreateWidget(QWidget):
             context_window=int(self.context_window_input.value()),
             compress_every=int(self.compress_every_input.value()),
             system_prompt=self.system_prompt_input.toPlainText().strip(),
+            allow_agent_switch=self.allow_switch_checkbox.isChecked(),
         )
         self.create_requested.emit(data)

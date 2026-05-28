@@ -198,6 +198,18 @@ class SessionPanel(QWidget):
         self.agent_combo.setMinimumWidth(180)
         self.agent_combo.setFixedHeight(32)
         toolbar_layout.addWidget(self.agent_combo)
+
+        self.agent_label = QLabel()
+        self.agent_label.setMinimumWidth(180)
+        self.agent_label.setFixedHeight(32)
+        self.agent_label.setStyleSheet(
+            "color: #e0e0e0; font-size: 12px; font-weight: 600;"
+            "background-color: #2d2d2d; border: 1px solid #3c3c3c;"
+            "border-radius: 6px; padding: 4px 10px;"
+        )
+        self.agent_label.setVisible(False)
+        toolbar_layout.addWidget(self.agent_label)
+
         toolbar_layout.addStretch(1)
 
         layout.addWidget(toolbar)
@@ -364,16 +376,42 @@ class SessionPanel(QWidget):
                 context_keep_last=data.context_window,
                 compression_interval=data.compress_every,
                 system_prompt=data.system_prompt,
+                allow_agent_switch=data.allow_agent_switch,
             )
         )
         self.active_session = session
         index = self.agent_combo.findData(data.target_id)
         if index >= 0:
             self.agent_combo.setCurrentIndex(index)
+        self._apply_agent_switch_mode(session)
         self.refresh_sessions(select_latest=True)
         self._render_session(session)
         self.sessions_changed.emit()
         self.show_chat_page()
+
+    # ── Agent switch mode ──────────────────────────────────────────────
+
+    def _apply_agent_switch_mode(self, session: Session) -> None:
+        if session.meta.allow_agent_switch:
+            self.agent_combo.setVisible(True)
+            self.agent_label.setVisible(False)
+        else:
+            self.agent_combo.setVisible(False)
+            self.agent_label.setVisible(True)
+            name = self._agent_name_for_id(session.meta.target_id)
+            self.agent_label.setText(name)
+
+    def _agent_name_for_id(self, agent_id: str) -> str:
+        try:
+            config = agent_config_from_dict(read_yaml(self.store.agent_yaml_path(agent_id)))
+            return f"{config.name} ({config.model.name})"
+        except Exception:
+            return agent_id
+
+    def _current_agent_id(self) -> str:
+        if self.active_session and not self.active_session.meta.allow_agent_switch:
+            return self.active_session.meta.target_id
+        return self.agent_combo.currentData() or ""
 
     # ── Messaging ───────────────────────────────────────────────────────
 
@@ -385,7 +423,7 @@ class SessionPanel(QWidget):
             return
         if self._load_worker and self._load_worker.isRunning():
             return
-        agent_id = self.agent_combo.currentData()
+        agent_id = self._current_agent_id()
         if not agent_id:
             self.chat_view.add_message("system", "No agent available. Create one first.")
             return
@@ -526,6 +564,7 @@ class SessionPanel(QWidget):
 
     def _on_session_loaded(self, session: Session) -> None:
         self.active_session = session
+        self._apply_agent_switch_mode(session)
         self._render_session(session)
         if session.meta.target_id:
             index = self.agent_combo.findData(session.meta.target_id)

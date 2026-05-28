@@ -47,6 +47,7 @@ class SessionMeta:
     tags: list[str] = field(default_factory=list)
     compression_interval: int = 10
     context_keep_last: int = 100
+    allow_agent_switch: bool = True
     summary: str = ""
     last_compressed_turn: int = 0
 
@@ -125,6 +126,7 @@ def session_meta_from_dict(data: dict[str, Any]) -> SessionMeta:
         tags=list(data.get("tags", [])),
         compression_interval=int(data.get("compression_interval", 0)),
         context_keep_last=int(data.get("context_keep_last", 12)),
+        allow_agent_switch=bool(data.get("allow_agent_switch", True)),
         summary=str(data.get("summary", "")),
         last_compressed_turn=int(data.get("last_compressed_turn", 0)),
     )
@@ -145,6 +147,7 @@ def session_meta_to_dict(meta: SessionMeta) -> dict[str, Any]:
         "tags": list(meta.tags),
         "compression_interval": meta.compression_interval,
         "context_keep_last": meta.context_keep_last,
+        "allow_agent_switch": meta.allow_agent_switch,
         "summary": meta.summary,
         "last_compressed_turn": meta.last_compressed_turn,
     }

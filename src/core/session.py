@@ -27,6 +27,7 @@ class Session:
         compression_interval: int = 10,
         description: str = "",
         system_prompt: str = "",
+        allow_agent_switch: bool = True,
     ) -> "Session":
         session_id = store.new_session_id()
         meta = SessionMeta(
@@ -38,6 +39,7 @@ class Session:
             system_prompt=system_prompt,
             context_keep_last=context_keep_last,
             compression_interval=compression_interval,
+            allow_agent_switch=allow_agent_switch,
         )
         session = cls(meta=meta, store=store)
         await session.save()
