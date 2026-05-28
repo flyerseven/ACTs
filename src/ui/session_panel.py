@@ -425,12 +425,14 @@ class SessionPanel(QWidget):
 
     def _render_session(self, session: Session) -> None:
         self._suppress_scroll_load = True
+        self.chat_view.setUpdatesEnabled(False)
         self.chat_view.clear()
         self._all_messages = list(session.messages)
         total = len(self._all_messages)
         self._display_offset = max(0, total - self.PAGE_SIZE)
         for msg in self._all_messages[self._display_offset:]:
             self.chat_view.add_message(msg.role, msg.content, render_latex=True)
+        self.chat_view.setUpdatesEnabled(True)
         # Keep scrolling to bottom at increasing delays — WebEngine renders
         # KaTeX asynchronously so the content height grows over time.
         self.chat_view.scroll_to_bottom()

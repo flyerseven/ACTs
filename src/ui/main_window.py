@@ -82,6 +82,8 @@ class MainWindow(QMainWindow):
         self.session_panel.sessions_changed.connect(self._on_sessions_changed)
         self.session_panel.session_edited.connect(self._on_session_edited)
 
+        self._warmup_webengine()
+
         self._set_active_tab(0)
         self.refresh_agent_list()
         self.refresh_session_list()
@@ -116,6 +118,21 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
 
         return bar
+
+    # ── WebEngine pre-warm ──────────────────────────────────────────────
+
+    def _warmup_webengine(self) -> None:
+        """Create a hidden QWebEngineView so Chromium process + GPU process
+        start before the window is shown.  Without this, the first visible
+        QWebEngineView instantiation steals the rendering context from the
+        window, causing a full-window white flash."""
+        try:
+            from PyQt6.QtWebEngineWidgets import QWebEngineView
+            self._web_warmup = QWebEngineView(self)
+            self._web_warmup.setVisible(False)
+            self._web_warmup.setHtml("<html><body style='background:#0f172a;'></body></html>")
+        except Exception:
+            pass
 
     # ── Sidebar ─────────────────────────────────────────────────────────
 

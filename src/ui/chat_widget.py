@@ -188,15 +188,15 @@ class ChatBubbleWidget(QFrame):
 
         # ── content area ──
         if self._use_web:
+            from PyQt6.QtGui import QColor
             self.label = QWebEngineView()
             self.label.setPage(_ClipboardPage(self.label))
-            self.label.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
             settings = self.label.page().settings()
             settings.setAttribute(QWebEngineSettings.WebAttribute.ShowScrollBars, False)
             settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptEnabled, True)
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessFileUrls, True)
             settings.setAttribute(QWebEngineSettings.WebAttribute.LocalContentCanAccessRemoteUrls, False)
-            self.label.page().setBackgroundColor(Qt.GlobalColor.transparent)
+            self.label.page().setBackgroundColor(QColor(self._bg_for_role(role)))
             self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
             self.label.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
             self.label.page().loadFinished.connect(self._on_web_loaded)
@@ -310,7 +310,10 @@ class ChatBubbleWidget(QFrame):
             else:
                 self._pending_render = True
         else:
-            self.label.setMarkdown(self._raw_text)
+            if self._raw_text:
+                self.label.setMarkdown(self._raw_text)
+            else:
+                self.label.setMarkdown("*Thinking...*")
 
     def _render_web(self) -> None:
         html_body = _markdown_to_html(self._raw_text)
@@ -374,6 +377,14 @@ class ChatBubbleWidget(QFrame):
             clipboard.setText(self._raw_text)
 
     @staticmethod
+    def _bg_for_role(role: str) -> str:
+        if role == "user":
+            return "#1d4ed8"
+        if role == "assistant":
+            return "#111827"
+        return "#0f172a"
+
+    @staticmethod
     def _avatar_text(role: str) -> str:
         if role == "user":
             return "U"
@@ -415,7 +426,10 @@ class ChatBubbleWidget(QFrame):
             "}"
         )
         self._text_color = fg
-        if isinstance(self.label, QTextBrowser):
+        if isinstance(self.label, QWebEngineView):
+            from PyQt6.QtGui import QColor
+            self.label.page().setBackgroundColor(QColor(bg))
+        elif isinstance(self.label, QTextBrowser):
             self.label.setStyleSheet(
                 "QTextBrowser {"
                 "background: transparent;"
@@ -519,6 +533,7 @@ class ChatViewWidget(QWidget):
             item = self.container_layout.takeAt(0)
             widget = item.widget()
             if widget is not None:
+                widget.hide()
                 widget.deleteLater()
         self._spacer = QSpacerItem(20, 20, QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self.container_layout.addItem(self._spacer)
@@ -667,6 +682,26 @@ h1, h2, h3, h4 {{ margin: 12px 0 4px 0; font-weight: 600; line-height: 1.3; }}
 h1 {{ font-size: 1.3em; }}
 h2 {{ font-size: 1.15em; }}
 h3 {{ font-size: 1.05em; }}
+.loading-dots {{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 2px;
+}}
+.loading-dots span {{
+  width: 7px;
+  height: 7px;
+  background: #64748b;
+  border-radius: 50%;
+  animation: dot-bounce 1.4s ease-in-out infinite both;
+}}
+.loading-dots span:nth-child(1) {{ animation-delay: -0.32s; }}
+.loading-dots span:nth-child(2) {{ animation-delay: -0.16s; }}
+.loading-dots span:nth-child(3) {{ animation-delay: 0s; }}
+@keyframes dot-bounce {{
+  0%, 80%, 100% {{ transform: scale(0.3); opacity: 0.4; }}
+  40% {{ transform: scale(1); opacity: 1; }}
+}}
 </style>
 <script src="katex.min.js"></script>
 <script src="auto-render.min.js"></script>
@@ -681,7 +716,11 @@ var delimiters = [
 
 function setHtml(html, renderLatex) {{
   var content = document.getElementById("content");
-  content.innerHTML = html || "";
+  if (!html || html.trim() === '') {{
+    content.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+    return;
+  }}
+  content.innerHTML = html;
   if (window.hljs) {{
     try {{ hljs.highlightAll(); }} catch(e) {{ console.error(e); }}
   }}
