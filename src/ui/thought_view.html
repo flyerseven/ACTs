@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<style>
+:root {
+  --bg: #1e1e1e;
+  --surface: #252526;
+  --border: #3c3c3c;
+  --text: #cccccc;
+  --text-muted: #858585;
+  --accent: #007acc;
+  --error: #ef4444;
+  --error-bg: rgba(239,68,68,0.08);
+  --success: #4ade80;
+  --success-bg: rgba(74,222,128,0.06);
+  --tool: #4fc1ff;
+  --tool-bg: rgba(0,122,204,0.08);
+  --think-bg: rgba(255,255,255,0.03);
+  --observe-bg: rgba(255,255,255,0.02);
+  --reflect: #c4b5fd;
+  --reflect-bg: rgba(167,139,250,0.05);
+  --radius: 8px;
+  --transition: 0.25s ease;
+}
+[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f5f5f5;
+  --border: #e0e0e0;
+  --text: #333333;
+  --text-muted: #888888;
+  --accent: #0066cc;
+  --think-bg: rgba(0,0,0,0.02);
+  --observe-bg: rgba(0,0,0,0.01);
+  --tool-bg: rgba(0,122,204,0.06);
+  --success-bg: rgba(74,222,128,0.04);
+  --reflect-bg: rgba(167,139,250,0.03);
+  --error-bg: rgba(239,68,68,0.05);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'IBM Plex Sans', 'Segoe UI', 'Noto Sans SC', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 16px;
+}
+
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.toolbar button {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background var(--transition);
+}
+.toolbar button:hover { background: var(--tool-bg); color: var(--tool); }
+.toolbar .sep { width: 1px; background: var(--border); margin: 0 4px; }
+.toolbar .theme-btn { margin-left: auto; font-size: 14px; padding: 4px 10px; }
+
+/* ── Status banner ── */
+.status-banner {
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 13px;
+  display: none;
+}
+.status-banner.done {
+  display: block;
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+.status-banner.failed {
+  display: block;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error);
+}
+
+/* ── Details (round) ── */
+.thought-round {
+  margin-bottom: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color var(--transition);
+}
+.thought-round.has-error {
+  border-color: var(--error);
+  box-shadow: 0 0 8px rgba(239,68,68,0.15);
+}
+
+.round-summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  font-size: 12px;
+  list-style: none;
+}
+.round-summary::-webkit-details-marker { display: none; }
+.round-summary::before {
+  content: '\25B8';
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform var(--transition);
+  width: 14px;
+  text-align: center;
+}
+details[open] > .round-summary::before {
+  transform: rotate(90deg);
+}
+
+.round-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: center;
+}
+
+.round-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.round-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  flex-shrink: 0;
+}
+.round-indicator.pulsing {
+  background: var(--accent);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ── Round body ── */
+.round-body {
+  padding: 0 14px 12px;
+}
+@keyframes slideDown {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 2000px; }
+}
+details[open] .round-body {
+  animation: slideDown 0.3s ease;
+}
+
+/* ── Phase rows ── */
+.phase {
+  display: flex;
+  gap: 10px;
+  padding: 6px 10px;
+  margin: 4px 0;
+  border-radius: 6px;
+  border-left: 3px solid transparent;
+}
+.phase-observe { border-left-color: var(--text-muted); background: var(--observe-bg); }
+.phase-think { border-left-color: var(--text-muted); background: var(--think-bg); }
+.phase-act { border-left-color: var(--accent); background: var(--tool-bg); }
+.phase-result { border-left-color: var(--success); background: var(--success-bg); }
+.phase-result.error { border-left-color: var(--error); background: var(--error-bg); }
+.phase-reflect { border-left-color: #a78bfa; background: var(--reflect-bg); }
+
+.phase-icon { width: 18px; text-align: center; flex-shrink: 0; font-size: 12px; }
+.phase-label {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 60px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.phase-observe .phase-label { color: var(--text-muted); }
+.phase-think .phase-label { color: var(--text-muted); }
+.phase-act .phase-label { color: var(--tool); }
+.phase-result .phase-label { color: var(--success); }
+.phase-result.error .phase-label { color: var(--error); }
+.phase-reflect .phase-label { color: var(--reflect); }
+
+.phase-content {
+  flex: 1;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+.phase-content pre {
+  background: rgba(0,0,0,0.2);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', 'Cascadia Code', 'Consolas', monospace;
+  font-size: 11px;
+  margin: 4px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.tool-name {
+  color: var(--tool);
+  font-weight: 600;
+  font-family: monospace;
+  font-size: 11.5px;
+}
+
+/* ── Empty state ── */
+.empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: var(--text-muted);
+}
+.empty-state .dots {
+  display: inline-flex;
+  gap: 6px;
+  margin-top: 12px;
+}
+.empty-state .dots span {
+  width: 8px; height: 8px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  animation: dot-bounce 1.4s ease-in-out infinite both;
+}
+.empty-state .dots span:nth-child(1) { animation-delay: -0.32s; }
+.empty-state .dots span:nth-child(2) { animation-delay: -0.16s; }
+@keyframes dot-bounce {
+  0%, 80%, 100% { transform: scale(0.3); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+</style>
+
+<script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+<script>
+// ── State ──
+var steps = {};
+var currentIndex = -1;
+var runActive = false;
+
+function $id(id) { return document.getElementById(id); }
+
+function ensureRound(index) {
+  if (steps[index]) return steps[index];
+  var details = document.createElement('details');
+  details.className = 'thought-round';
+  details.open = true;
+  details.dataset.index = index;
+
+  var summary = document.createElement('summary');
+  summary.className = 'round-summary';
+  summary.innerHTML =
+    '<span class="round-badge">R' + (index + 1) + '</span>' +
+    '<span class="round-title">Thinking...</span>' +
+    '<span class="round-indicator pulsing"></span>';
+  details.appendChild(summary);
+
+  var body = document.createElement('div');
+  body.className = 'round-body';
+  details.appendChild(body);
+
+  $id('rounds').appendChild(details);
+
+  steps[index] = {
+    details: details,
+    summary: summary,
+    body: body,
+    title: summary.querySelector('.round-title'),
+    indicator: summary.querySelector('.round-indicator'),
+    phases: {}
+  };
+
+  currentIndex = index;
+  return steps[index];
+}
+
+function addPhase(round, phaseType, icon, label) {
+  if (round.phases[phaseType]) return round.phases[phaseType];
+  var div = document.createElement('div');
+  div.className = 'phase phase-' + phaseType;
+  div.innerHTML =
+    '<span class="phase-icon">' + icon + '</span>' +
+    '<span class="phase-label">' + label + '</span>' +
+    '<span class="phase-content"></span>';
+  round.body.appendChild(div);
+  round.phases[phaseType] = div;
+  return div;
+}
+
+function setPhaseContent(round, phaseType, html) {
+  var iconMap = {observe: '👁', think: '💭', act: '🔧', result: '✅', reflect: '🔄'};
+  var labelMap = {observe: 'OBSERVE', think: 'THINK', act: 'ACT', result: 'RESULT', reflect: 'REFLECT'};
+  var phase = addPhase(round, phaseType, iconMap[phaseType] || '', labelMap[phaseType] || phaseType.toUpperCase());
+  phase.querySelector('.phase-content').innerHTML = html;
+  return phase;
+}
+
+function setResultError(round, isError) {
+  var phase = round.phases['result'];
+  if (phase) { phase.classList.toggle('error', isError); }
+}
+
+function updateTitle(round, text) {
+  var short = text.substring(0, 80).replace(/\n/g, ' ');
+  round.title.textContent = short || 'Thinking...';
+}
+
+function scrollToBottom() {
+  var el = steps[currentIndex];
+  if (el && el.details) {
+    el.details.scrollIntoView({behavior: 'smooth', block: 'end'});
+  }
+}
+
+function collapseCompletedRounds(keepOpenIndex) {
+  for (var key in steps) {
+    var idx = parseInt(key);
+    var round = steps[key];
+    if (idx === keepOpenIndex) {
+      round.details.open = true;
+      if (round.indicator && runActive) round.indicator.classList.add('pulsing');
+    } else if (round.details.classList.contains('has-error')) {
+      round.details.open = true;
+      if (round.indicator) round.indicator.classList.remove('pulsing');
+    } else {
+      round.details.open = false;
+      if (round.indicator) round.indicator.classList.remove('pulsing');
+    }
+  }
+}
+
+// ── QWebChannel signal handlers ──
+
+function onRunStarted(goal) {
+  $id('empty-state').style.display = 'none';
+  $id('status-banner').className = 'status-banner';
+  $id('status-banner').style.display = 'none';
+  steps = {};
+  currentIndex = -1;
+  runActive = true;
+  $id('rounds').innerHTML = '';
+}
+
+function onStepStarted(index) { ensureRound(index); }
+
+function onThoughtChunk(index, chunk) {
+  var round = ensureRound(index);
+  var phase = setPhaseContent(round, 'think', '', '');
+  var content = phase.querySelector('.phase-content');
+  content.textContent += chunk;
+  updateTitle(round, 'THINK: ' + (content.textContent || ''));
+  scrollToBottom();
+}
+
+function onThoughtDone(index, fullText) {
+  var round = ensureRound(index);
+  setPhaseContent(round, 'think', '', '');
+  round.phases['think'].querySelector('.phase-content').textContent = fullText;
+  updateTitle(round, 'THINK: ' + fullText.substring(0, 80));
+}
+
+function onToolCallStarted(index, toolName, argsJson) {
+  var round = ensureRound(index);
+  var args = JSON.parse(argsJson);
+  setPhaseContent(round, 'act', '', '');
+  round.phases['act'].querySelector('.phase-content').innerHTML =
+    '<span class="tool-name">' + escapeHtml(toolName) + '</span>' +
+    '<pre>' + escapeHtml(JSON.stringify(args, null, 2)) + '</pre>';
+  updateTitle(round, 'ACT: ' + toolName);
+}
+
+function onToolResult(index, result, error, durationMs) {
+  var round = ensureRound(index);
+  var isError = error && error.length > 0;
+  var displayText = isError ? error : result;
+  var phase = setPhaseContent(round, 'result', '', '');
+  phase.querySelector('.phase-content').innerHTML =
+    '<pre>' + escapeHtml(displayText || '(empty)') + '</pre>' +
+    '<span style="font-size:10px;color:var(--text-muted)">' + durationMs.toFixed(0) + 'ms</span>';
+  setResultError(round, isError);
+  if (isError) {
+    round.details.classList.add('has-error');
+    round.details.open = true;
+    updateTitle(round, 'ERROR: ' + (displayText || '').substring(0, 80));
+  }
+}
+
+function onReflectionDone(index, summary, isStuck) {
+  var round = ensureRound(index);
+  setPhaseContent(round, 'reflect', '', '');
+  round.phases['reflect'].querySelector('.phase-content').textContent = summary || '(no reflection)';
+  if (isStuck) {
+    round.details.classList.add('has-error');
+    round.details.open = true;
+  }
+}
+
+function onStepEnded(index, isCompleted) {
+  if (!isCompleted) { collapseCompletedRounds(index); }
+}
+
+function onRunFinished(status, totalSteps, errorsJson) {
+  runActive = false;
+  collapseCompletedRounds(-1);
+  var banner = $id('status-banner');
+  banner.style.display = 'block';
+  var errors = JSON.parse(errorsJson);
+  if (status === 'done') {
+    banner.className = 'status-banner done';
+    banner.textContent = 'Completed — ' + totalSteps + ' steps';
+  } else {
+    banner.className = 'status-banner failed';
+    banner.textContent = status.toUpperCase() + ' — ' + totalSteps + ' steps' +
+      (errors.length > 0 ? ' (' + errors.length + ' errors)' : '');
+  }
+}
+
+// ── Toolbar ──
+
+function expandAll() {
+  for (var key in steps) { steps[key].details.open = true; }
+}
+function collapseAll() {
+  for (var key in steps) { steps[key].details.open = false; }
+}
+function toggleTheme() {
+  var html = document.documentElement;
+  var next = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+  html.setAttribute('data-theme', next);
+  $id('theme-btn').textContent = next === 'dark' ? '☀' : '🌙';
+}
+
+// ── Export ──
+
+function exportMarkdown() {
+  var md = '# Agent Run\n\n';
+  for (var key in steps) {
+    var round = steps[key];
+    md += '## Round ' + (parseInt(key) + 1) + '\n\n';
+    var phases = round.phases;
+    if (phases['think']) {
+      md += '### THINK\n\n' + (phases['think'].querySelector('.phase-content').textContent || '') + '\n\n';
+    }
+    if (phases['act']) {
+      md += '### ACT\n\n' + (phases['act'].querySelector('.phase-content').textContent || '') + '\n\n';
+    }
+    if (phases['result']) {
+      md += '### RESULT\n\n' + (phases['result'].querySelector('.phase-content').textContent || '') + '\n\n';
+    }
+    if (phases['reflect']) {
+      md += '### REFLECT\n\n' + (phases['reflect'].querySelector('.phase-content').textContent || '') + '\n\n';
+    }
+    md += '---\n\n';
+  }
+  if (window.bridge) {
+    window.bridge.save_file(md, 'agent_run.md');
+  }
+}
+
+function exportJSON() {
+  var data = {goal: '', steps: []};
+  for (var key in steps) {
+    var round = steps[key];
+    data.steps.push({
+      index: parseInt(key),
+      thought: round.phases['think'] ? round.phases['think'].querySelector('.phase-content').textContent : '',
+      tool_result: round.phases['result'] ? round.phases['result'].querySelector('.phase-content').textContent : '',
+      reflection: round.phases['reflect'] ? round.phases['reflect'].querySelector('.phase-content').textContent : '',
+    });
+  }
+  if (window.bridge) {
+    window.bridge.save_file(JSON.stringify(data, null, 2), 'agent_run.json');
+  }
+}
+
+function escapeHtml(text) {
+  var div = document.createElement('div');
+  div.appendChild(document.createTextNode(text));
+  return div.innerHTML;
+}
+
+// ── Init ──
+window.onload = function() {
+  if (typeof QWebChannel === 'undefined') {
+    document.body.innerHTML = '<div class="empty-state"><p>QWebChannel not available. This view requires PyQt6 WebEngine.</p></div>';
+    return;
+  }
+
+  new QWebChannel(qt.webChannelTransport, function(channel) {
+    window.recorder = channel.objects.recorder;
+    window.bridge = channel.objects.bridge;
+
+    if (window.recorder) {
+      window.recorder.run_started.connect(onRunStarted);
+      window.recorder.step_started.connect(onStepStarted);
+      window.recorder.thought_chunk.connect(onThoughtChunk);
+      window.recorder.thought_done.connect(onThoughtDone);
+      window.recorder.tool_call_started.connect(onToolCallStarted);
+      window.recorder.tool_result.connect(onToolResult);
+      window.recorder.reflection_done.connect(onReflectionDone);
+      window.recorder.step_ended.connect(onStepEnded);
+      window.recorder.run_finished.connect(onRunFinished);
+    }
+  });
+};
+</script>
+</head>
+<body>
+
+<div class="toolbar">
+  <button onclick="expandAll()">Expand All</button>
+  <button onclick="collapseAll()">Collapse All</button>
+  <span class="sep"></span>
+  <button onclick="exportMarkdown()">Export MD</button>
+  <button onclick="exportJSON()">Export JSON</button>
+  <button id="theme-btn" class="theme-btn" onclick="toggleTheme()">&#x2600;</button>
+</div>
+
+<div id="status-banner" class="status-banner"></div>
+
+<div id="empty-state" class="empty-state">
+  <p>Waiting for agent to start...</p>
+  <div class="dots"><span></span><span></span><span></span></div>
+</div>
+
+<div id="rounds"></div>
+
+</body>
+</html>
