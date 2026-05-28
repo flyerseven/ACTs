@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "agent-engine"
+version = "0.1.0"
+description = "A general-purpose autonomous Agent decision system"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.0",
+    "loguru>=0.7",
+    "python-dotenv>=1.0",
+    "httpx>=0.25",
+]
+
+[project.optional-dependencies]
+tools = ["requests>=2.28"]
+
+[project.scripts]
+agent-engine = "agent_engine.cli:main"
