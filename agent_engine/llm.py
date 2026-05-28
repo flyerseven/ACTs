@@ -185,6 +185,25 @@ class OpenAIAdapter(LLMAdapter):
 
         raise RuntimeError(f"OpenAIAdapter: all {self.max_retries + 1} attempts failed. Last error: {last_error}")
 
+    async def _iter_sse_deltas(self, response) -> AsyncGenerator[dict, None]:
+        """Yield parsed SSE data dicts from a streaming response.
+
+        Handles SSE line format: skips non-``data:`` lines, handles the
+        ``[DONE]`` sentinel, and silently skips malformed JSON lines.
+        """
+        import json
+        async for line in response.aiter_lines():
+            if not line.startswith("data: "):
+                continue
+            data_str = line[6:]
+            if data_str == "[DONE]":
+                break
+            try:
+                data = json.loads(data_str)
+                yield data
+            except json.JSONDecodeError:
+                continue
+
     async def _chat_streaming_with_tools(
         self,
         messages: list[dict],
@@ -192,7 +211,14 @@ class OpenAIAdapter(LLMAdapter):
         on_chunk: Callable[[str], None],
     ) -> LLMResponse:
         """Stream response chunks via on_chunk while accumulating full content
-        and extracting tool calls from streamed deltas."""
+        and extracting tool calls from streamed deltas.
+
+        Note: Unlike the non-streaming ``chat()`` method, automatic retries
+        are intentionally NOT performed once chunks start flowing through
+        ``on_chunk``, because partial content may have already been delivered
+        to the consumer and cannot be replayed.  Only the initial connection
+        setup (before any chunk is yielded) is retried up to ``max_retries``.
+        """
         import json
 
         payload: dict = {
@@ -204,45 +230,63 @@ class OpenAIAdapter(LLMAdapter):
             payload["tools"] = [{"type": "function", "function": t} for t in tools]
             payload["tool_choice"] = "auto"
 
-        client = await self._get_client()
         content_parts: list[str] = []
         tool_call_deltas: dict[int, dict] = {}
         usage_data: dict = {}
 
-        async with client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as resp:
-            resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if not line.startswith("data: "):
+        # Retry initial connection setup — safe because no chunks have been
+        # yielded to the consumer yet.
+        last_error: str | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                client = await self._get_client()
+                async with client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as resp:
+                    resp.raise_for_status()
+                    # Connection established; process stream.  No further
+                    # retries beyond this point because on_chunk may already
+                    # have delivered content to the caller.
+                    async for data in self._iter_sse_deltas(resp):
+                        try:
+                            delta = data["choices"][0].get("delta", {})
+
+                            content_delta = delta.get("content", "")
+                            if content_delta:
+                                content_parts.append(content_delta)
+                                on_chunk(content_delta)
+
+                            tc_deltas = delta.get("tool_calls", [])
+                            for tc in tc_deltas:
+                                idx = tc.get("index", 0)
+                                if idx not in tool_call_deltas:
+                                    tool_call_deltas[idx] = {"id": "", "name": "", "arguments_str": ""}
+                                if "id" in tc and tc["id"]:
+                                    tool_call_deltas[idx]["id"] = tc["id"]
+                                func = tc.get("function", {})
+                                if "name" in func and func["name"]:
+                                    tool_call_deltas[idx]["name"] = func["name"]
+                                if "arguments" in func and func["arguments"]:
+                                    tool_call_deltas[idx]["arguments_str"] += func["arguments"]
+
+                            if data.get("usage"):
+                                usage_data = data["usage"]
+                        except (KeyError, IndexError):
+                            continue
+
+                # Stream completed successfully — exit retry loop
+                break
+            except (httpx.HTTPStatusError, httpx.RequestError) as e:
+                last_error = str(e)
+                logger.warning(f"OpenAI streaming error (attempt {attempt + 1}): {e}")
+                if attempt < self.max_retries:
+                    # Reset accumulators for retry
+                    content_parts.clear()
+                    tool_call_deltas.clear()
+                    usage_data.clear()
                     continue
-                data_str = line[6:]
-                if data_str == "[DONE]":
-                    break
-                try:
-                    data = json.loads(data_str)
-                    delta = data["choices"][0].get("delta", {})
-
-                    content_delta = delta.get("content", "")
-                    if content_delta:
-                        content_parts.append(content_delta)
-                        on_chunk(content_delta)
-
-                    tc_deltas = delta.get("tool_calls", [])
-                    for tc in tc_deltas:
-                        idx = tc.get("index", 0)
-                        if idx not in tool_call_deltas:
-                            tool_call_deltas[idx] = {"id": "", "name": "", "arguments_str": ""}
-                        if "id" in tc and tc["id"]:
-                            tool_call_deltas[idx]["id"] = tc["id"]
-                        func = tc.get("function", {})
-                        if "name" in func and func["name"]:
-                            tool_call_deltas[idx]["name"] = func["name"]
-                        if "arguments" in func and func["arguments"]:
-                            tool_call_deltas[idx]["arguments_str"] += func["arguments"]
-
-                    if data.get("usage"):
-                        usage_data = data["usage"]
-                except (json.JSONDecodeError, KeyError, IndexError):
-                    continue
+                raise RuntimeError(
+                    f"OpenAIAdapter streaming: all {self.max_retries + 1} attempts failed. "
+                    f"Last error: {last_error}"
+                )
 
         tool_calls: list[ToolCallRequest] = []
         for idx in sorted(tool_call_deltas.keys()):
@@ -275,20 +319,14 @@ class OpenAIAdapter(LLMAdapter):
         client = await self._get_client()
         async with client.stream("POST", f"{self.base_url}/chat/completions", json=payload) as resp:
             resp.raise_for_status()
-            async for line in resp.aiter_lines():
-                if line.startswith("data: "):
-                    data_str = line[6:]
-                    if data_str == "[DONE]":
-                        break
-                    import json
-                    try:
-                        data = json.loads(data_str)
-                        delta = data["choices"][0].get("delta", {})
-                        content = delta.get("content", "")
-                        if content:
-                            yield content
-                    except (json.JSONDecodeError, KeyError, IndexError):
-                        continue
+            async for data in self._iter_sse_deltas(resp):
+                try:
+                    delta = data["choices"][0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield content
+                except (KeyError, IndexError):
+                    continue
 
     async def close(self):
         if self._client:
