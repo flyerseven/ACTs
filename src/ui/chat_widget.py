@@ -310,7 +310,10 @@ class ChatBubbleWidget(QFrame):
             else:
                 self._pending_render = True
         else:
-            self.label.setMarkdown(self._raw_text)
+            if self._raw_text:
+                self.label.setMarkdown(self._raw_text)
+            else:
+                self.label.setMarkdown("*Thinking...*")
 
     def _render_web(self) -> None:
         html_body = _markdown_to_html(self._raw_text)
@@ -667,6 +670,26 @@ h1, h2, h3, h4 {{ margin: 12px 0 4px 0; font-weight: 600; line-height: 1.3; }}
 h1 {{ font-size: 1.3em; }}
 h2 {{ font-size: 1.15em; }}
 h3 {{ font-size: 1.05em; }}
+.loading-dots {{
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 10px 2px;
+}}
+.loading-dots span {{
+  width: 7px;
+  height: 7px;
+  background: #64748b;
+  border-radius: 50%;
+  animation: dot-bounce 1.4s ease-in-out infinite both;
+}}
+.loading-dots span:nth-child(1) {{ animation-delay: -0.32s; }}
+.loading-dots span:nth-child(2) {{ animation-delay: -0.16s; }}
+.loading-dots span:nth-child(3) {{ animation-delay: 0s; }}
+@keyframes dot-bounce {{
+  0%, 80%, 100% {{ transform: scale(0.3); opacity: 0.4; }}
+  40% {{ transform: scale(1); opacity: 1; }}
+}}
 </style>
 <script src="katex.min.js"></script>
 <script src="auto-render.min.js"></script>
@@ -681,7 +704,11 @@ var delimiters = [
 
 function setHtml(html, renderLatex) {{
   var content = document.getElementById("content");
-  content.innerHTML = html || "";
+  if (!html || html.trim() === '') {{
+    content.innerHTML = '<div class="loading-dots"><span></span><span></span><span></span></div>';
+    return;
+  }}
+  content.innerHTML = html;
   if (window.hljs) {{
     try {{ hljs.highlightAll(); }} catch(e) {{ console.error(e); }}
   }}
