@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 
 from PyQt6.QtCore import Qt, QPropertyAnimation, QThread, QTimer, pyqtSignal
+
+from core.thought_recorder import ThoughtRecorder
+from ui.thought_view import ThoughtView
 from PyQt6.QtGui import QPainter, QColor, QBrush
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -128,6 +132,119 @@ class LoadSessionWorker(QThread):
             self.failed.emit(str(exc))
 
 
+class EngineWorker(QThread):
+    """Runs AgentEngine in background with streaming thought chunks."""
+
+    thought_chunk = pyqtSignal(int, str)
+    tool_call_signal = pyqtSignal(int, str, str)
+    tool_result_signal = pyqtSignal(int, str, str, float)
+    reflection_signal = pyqtSignal(int, str, bool)
+    step_end_signal = pyqtSignal(int, bool)
+    engine_started = pyqtSignal(str)
+    engine_finished = pyqtSignal(str, int, str)
+    engine_failed = pyqtSignal(str)
+    finished_reply = pyqtSignal(str)
+
+    def __init__(self, agent_id: str, content: str, session: Session,
+                 store: FileStore, vault: Vault,
+                 token_tracker: "TokenTracker | None" = None) -> None:
+        super().__init__()
+        self.agent_id = agent_id
+        self.content = content
+        self.session = session
+        self.store = store
+        self.vault = vault
+        self.token_tracker = token_tracker
+
+    def run(self) -> None:
+        try:
+            asyncio.run(self._task())
+        except Exception as exc:
+            self.engine_failed.emit(str(exc))
+
+    async def _task(self) -> None:
+        from agent_engine.engine import AgentEngine
+        from agent_engine.config import EngineConfig
+        from agent_engine.tools import ToolRegistry
+        from agent_engine.llm import OpenAIAdapter
+
+        config = agent_config_from_dict(read_yaml(
+            self.store.agent_yaml_path(self.agent_id)))
+        api_key = self.vault.resolve_key_ref(config.model.api_key_ref)
+
+        engine_config = EngineConfig(
+            openai_model=config.model.name,
+            openai_base_url=config.model.base_url or "https://api.openai.com/v1",
+            openai_api_key=api_key,
+        )
+        llm = OpenAIAdapter(
+            api_key=api_key,
+            base_url=config.model.base_url or "https://api.openai.com/v1",
+            model=config.model.name,
+        )
+        tools = ToolRegistry()
+
+        try:
+            from agent_engine.tools.builtin import register_all
+            register_all(tools)
+        except ImportError:
+            pass
+
+        engine = AgentEngine(llm=llm, config=engine_config, tools=tools)
+
+        self.engine_started.emit(self.content)
+
+        step_index = 0
+
+        def on_chunk(chunk: str) -> None:
+            self.thought_chunk.emit(step_index, chunk)
+
+        orig_emit = engine.observer.emit
+
+        def patched_emit(event) -> None:
+            nonlocal step_index
+            orig_emit(event)
+            if event.type == "step_start":
+                step_index = event.data.get("index", step_index)
+            elif event.type == "step_end":
+                self.step_end_signal.emit(step_index, False)
+            elif event.type == "done":
+                self.step_end_signal.emit(step_index, True)
+
+        engine.observer.emit = patched_emit
+
+        state = await engine.run(self.content, on_thought_chunk=on_chunk)
+
+        for step in state.steps:
+            idx = step.index
+            if step.tool_call:
+                self.tool_call_signal.emit(
+                    idx, step.tool_call.tool_name,
+                    json.dumps(step.tool_call.arguments, ensure_ascii=False))
+                self.tool_result_signal.emit(
+                    idx, step.observation or "",
+                    step.tool_call.error or "",
+                    step.tool_call.duration_ms)
+            if step.reflection:
+                is_stuck = "stuck" in step.reflection.lower()
+                self.reflection_signal.emit(idx, step.reflection, is_stuck)
+
+        reply_parts = []
+        for step in state.steps:
+            if step.thought:
+                reply_parts.append(step.thought)
+        reply = "\n\n".join(reply_parts) if reply_parts else "Task completed."
+
+        await self.session.add_message("assistant", reply)
+        self.session.maybe_compress_context()
+        await self.session.save()
+
+        self.engine_finished.emit(
+            state.status, len(state.steps),
+            json.dumps(state.errors, ensure_ascii=False))
+        self.finished_reply.emit(reply)
+
+
 class SessionPanel(QWidget):
     PAGE_SIZE = 20
 
@@ -155,6 +272,10 @@ class SessionPanel(QWidget):
         self._load_worker: LoadSessionWorker | None = None
         self._load_spinner: QWidget | None = None
         self._spinner_dots: LoadingDots | None = None
+        self._thought_view: ThoughtView | None = None
+        self._thought_recorder: ThoughtRecorder | None = None
+        self._engine_worker: EngineWorker | None = None
+        self._use_decision_core: bool = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -444,9 +565,19 @@ class SessionPanel(QWidget):
 
         self.chat_view.add_message("user", content, render_latex=True)
         self.input_box.clear()
-        self._stream_text = ""
-        self._stream_bubble = self.chat_view.add_message("assistant", "", render_latex=False)
-        self._start_stream(agent_id, content)
+
+        # Check if agent has decision core enabled
+        agent_config = agent_config_from_dict(
+            read_yaml(self.store.agent_yaml_path(agent_id)))
+        self._use_decision_core = agent_config.enable_decision_core
+
+        if self._use_decision_core:
+            self._start_engine_stream(agent_id, content)
+        else:
+            self._stream_text = ""
+            self._stream_bubble = self.chat_view.add_message(
+                "assistant", "", render_latex=False)
+            self._start_stream(agent_id, content)
 
     def _start_stream(self, agent_id: str, content: str) -> None:
         if not self.active_session:
@@ -494,6 +625,75 @@ class SessionPanel(QWidget):
             self.session_combo.setEnabled(True)
         if self.new_session_button:
             self.new_session_button.setEnabled(True)
+
+    def _start_engine_stream(self, agent_id: str, content: str) -> None:
+        """Start the engine with thought process visualization."""
+        if not self.active_session:
+            return
+        self.send_button.setEnabled(False)
+        self.input_box.setEnabled(False)
+        if self.session_combo:
+            self.session_combo.setEnabled(False)
+        if self.new_session_button:
+            self.new_session_button.setEnabled(False)
+
+        # Create ThoughtRecorder (main thread QObject)
+        self._thought_recorder = ThoughtRecorder()
+
+        # Create and insert ThoughtView into chat layout
+        if self._thought_view is not None:
+            self._thought_view.hide()
+            self._thought_view.deleteLater()
+        self._thought_view = ThoughtView()
+        self._thought_view.set_recorder(self._thought_recorder)
+
+        # Insert into chat_view container (before the spacer at the end)
+        self.chat_view.container_layout.insertWidget(
+            self.chat_view.container_layout.count() - 1,
+            self._thought_view)
+
+        # Start engine worker
+        self._engine_worker = EngineWorker(
+            agent_id, content, self.active_session,
+            self.store, self.vault, token_tracker=self.token_tracker)
+
+        # Wire worker signals -> ThoughtRecorder slots
+        self._engine_worker.engine_started.connect(
+            self._thought_recorder.start_run)
+        self._engine_worker.thought_chunk.connect(
+            self._thought_recorder.on_thought_chunk)
+        self._engine_worker.tool_call_signal.connect(
+            lambda idx, name, args: self._thought_recorder.on_tool_call(
+                idx, name, json.loads(args)))
+        self._engine_worker.tool_result_signal.connect(
+            self._thought_recorder.on_tool_result)
+        self._engine_worker.reflection_signal.connect(
+            self._thought_recorder.on_reflection)
+        self._engine_worker.step_end_signal.connect(
+            self._thought_recorder.on_step_end)
+        self._engine_worker.engine_finished.connect(
+            lambda status, steps, errors: self._thought_recorder.finish_run(
+                status, json.loads(errors)))
+
+        # Wire worker signals -> SessionPanel handlers
+        self._engine_worker.finished_reply.connect(self._on_engine_finished)
+        self._engine_worker.engine_failed.connect(self._on_engine_failed)
+
+        self._engine_worker.start()
+
+    def _on_engine_finished(self, reply: str) -> None:
+        self._enable_input()
+        self._suppress_reload = True
+        self.refresh_sessions()
+        self._suppress_reload = False
+        self.sessions_changed.emit()
+
+    def _on_engine_failed(self, message: str) -> None:
+        self._enable_input()
+        self._suppress_reload = True
+        self.refresh_sessions()
+        self._suppress_reload = False
+        self.sessions_changed.emit()
 
     # ── Session loading ─────────────────────────────────────────────────
 
