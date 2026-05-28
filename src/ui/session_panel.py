@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import asyncio
 
-from PyQt6.QtCore import Qt, QThread, QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QPropertyAnimation, QThread, QTimer, pyqtSignal
+from PyQt6.QtGui import QPainter, QColor, QBrush
 from PyQt6.QtWidgets import (
     QComboBox,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -27,6 +30,44 @@ from ui.session_create_panel import SessionCreateData, SessionCreateWidget
 
 if TYPE_CHECKING:
     from core.token_tracker import TokenTracker
+
+
+class LoadingDots(QWidget):
+    """Three pulsing dots in a wave, similar to GPT's loading indicator."""
+
+    DOT_COUNT = 3
+    DOT_SIZE = 8
+    DOT_GAP = 8
+    CYCLE_MS = 1200  # one full wave cycle
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        w = self.DOT_COUNT * self.DOT_SIZE + (self.DOT_COUNT - 1) * self.DOT_GAP
+        self.setFixedSize(w, self.DOT_SIZE + 4)
+        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self._phase = 0.0
+        self._timer = QTimer(self)
+        self._timer.timeout.connect(self._step)
+        self._timer.start(50)
+
+    def _step(self) -> None:
+        self._phase += 0.15
+        self.update()
+
+    def paintEvent(self, _event) -> None:
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        y = self.height() // 2
+        for i in range(self.DOT_COUNT):
+            offset = i * (2 * 3.14159 / self.DOT_COUNT)
+            v = (1.0 + __import__('math').sin(self._phase + offset)) / 2.0
+            alpha = int(60 + v * 180)  # 60-240 range for visible contrast
+            x = i * (self.DOT_SIZE + self.DOT_GAP) + self.DOT_SIZE // 2
+            p.setBrush(QBrush(QColor(148, 163, 184, alpha)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(x - self.DOT_SIZE // 2, y - self.DOT_SIZE // 2,
+                          self.DOT_SIZE, self.DOT_SIZE)
+        p.end()
 
 
 class ChatWorker(QThread):
@@ -70,6 +111,23 @@ class ChatWorker(QThread):
         return reply
 
 
+class LoadSessionWorker(QThread):
+    loaded = pyqtSignal(object)  # Session
+    failed = pyqtSignal(str)
+
+    def __init__(self, session_id: str, store: FileStore) -> None:
+        super().__init__()
+        self.session_id = session_id
+        self.store = store
+
+    def run(self) -> None:
+        try:
+            session = asyncio.run(Session.load(self.session_id, self.store))
+            self.loaded.emit(session)
+        except Exception as exc:
+            self.failed.emit(str(exc))
+
+
 class SessionPanel(QWidget):
     PAGE_SIZE = 20
 
@@ -94,6 +152,9 @@ class SessionPanel(QWidget):
         self._display_offset: int = 0
         self._all_messages: list = []
         self._suppress_scroll_load: bool = False
+        self._load_worker: LoadSessionWorker | None = None
+        self._load_spinner: QWidget | None = None
+        self._spinner_dots: LoadingDots | None = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -276,6 +337,8 @@ class SessionPanel(QWidget):
     def show_create_page(self) -> None:
         if self._worker and self._worker.isRunning():
             return
+        if self._load_worker and self._load_worker.isRunning():
+            return
         if self._session_create:
             self._session_create.reset()
         if self._chat_page and self._session_create and self._page_stack:
@@ -319,6 +382,8 @@ class SessionPanel(QWidget):
         if not content:
             return
         if self._worker and self._worker.isRunning():
+            return
+        if self._load_worker and self._load_worker.isRunning():
             return
         agent_id = self.agent_combo.currentData()
         if not agent_id:
@@ -399,6 +464,8 @@ class SessionPanel(QWidget):
             return
         if self._worker and self._worker.isRunning():
             return
+        if self._load_worker and self._load_worker.isRunning():
+            return
         if not self.session_combo:
             return
         session_id = self.session_combo.currentData()
@@ -413,9 +480,51 @@ class SessionPanel(QWidget):
             return
         if self._worker and self._worker.isRunning():
             return
+        if self._load_worker and self._load_worker.isRunning():
+            return
         if self.active_session and self.active_session.meta.id == session_id:
             return
-        session = asyncio.run(Session.load(session_id, self.store))
+
+        self._show_load_spinner()
+
+        self._load_worker = LoadSessionWorker(session_id, self.store)
+        self._load_worker.loaded.connect(self._on_session_loaded)
+        self._load_worker.failed.connect(self._on_session_load_failed)
+        self._load_worker.start()
+
+    def _show_load_spinner(self) -> None:
+        self._hide_load_spinner()
+
+        spinner = QFrame(self._chat_page)
+        spinner.setStyleSheet("background-color: #0b1120; border: none;")
+        spinner.setGeometry(self._chat_page.rect())
+        spinner.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
+
+        layout = QVBoxLayout(spinner)
+        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.setSpacing(8)
+
+        self._spinner_dots = LoadingDots()
+        layout.addWidget(self._spinner_dots, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        label = QLabel("Loading")
+        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        label.setStyleSheet(
+            "color: #94a3b8; font-size: 13px; background: transparent; border: none;"
+        )
+        layout.addWidget(label)
+
+        spinner.show()
+        spinner.raise_()
+        self._load_spinner = spinner
+
+    def _hide_load_spinner(self) -> None:
+        self._spinner_dots = None
+        if self._load_spinner:
+            self._load_spinner.deleteLater()
+            self._load_spinner = None
+
+    def _on_session_loaded(self, session: Session) -> None:
         self.active_session = session
         self._render_session(session)
         if session.meta.target_id:
@@ -423,7 +532,25 @@ class SessionPanel(QWidget):
             if index >= 0:
                 self.agent_combo.setCurrentIndex(index)
 
+    def _on_session_load_failed(self, error: str) -> None:
+        self._hide_load_spinner()
+        self.chat_view.clear()
+        self.chat_view.add_message("system", f"Failed to load session: {error}")
+
     def _render_session(self, session: Session) -> None:
+        # If spinner is already visible, repurpose it as the render mask so there's
+        # no visual gap or double-loading appearance. Keep the "Loading..." text
+        # animating until messages are fully rendered.
+        if self._load_spinner is not None and self._load_spinner.isVisible():
+            mask = self._load_spinner
+        else:
+            mask = QFrame(self._chat_page)
+            mask.setStyleSheet("background-color: #0b1120; border: none;")
+            mask.setGeometry(self.chat_view.geometry())
+            mask.show()
+            mask.raise_()
+        self._render_mask = mask
+
         self._suppress_scroll_load = True
         self.chat_view.setUpdatesEnabled(False)
         self.chat_view.clear()
@@ -438,11 +565,36 @@ class SessionPanel(QWidget):
         self.chat_view.scroll_to_bottom()
         QTimer.singleShot(300, self.chat_view._scroll_to_bottom)
         QTimer.singleShot(800, self.chat_view._scroll_to_bottom)
-        QTimer.singleShot(1500, self._enable_scroll_load)
+        QTimer.singleShot(1500, self._finish_render_session)
 
-    def _enable_scroll_load(self) -> None:
+    def _finish_render_session(self) -> None:
         self._suppress_scroll_load = False
         self.chat_view._scroll_to_bottom()
+
+        mask = getattr(self, '_render_mask', None)
+        if mask is None:
+            return
+        self._render_mask = None
+
+        # Make the mask click-through during fade-out
+        mask.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+
+        effect = QGraphicsOpacityEffect(mask)
+        effect.setOpacity(1.0)
+        mask.setGraphicsEffect(effect)
+
+        self._render_anim = QPropertyAnimation(effect, b"opacity")
+        self._render_anim.setDuration(150)
+        self._render_anim.setStartValue(1.0)
+        self._render_anim.setEndValue(0.0)
+
+        def _on_finished() -> None:
+            mask.deleteLater()
+            self._render_anim = None
+            self._hide_load_spinner()
+
+        self._render_anim.finished.connect(_on_finished)
+        self._render_anim.start()
 
     def _load_more_messages(self) -> None:
         if self._suppress_scroll_load:
