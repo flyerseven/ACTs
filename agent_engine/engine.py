@@ -6,6 +6,8 @@ is achieved or a stop condition is met.
 """
 from __future__ import annotations
 
+from typing import Callable
+
 from loguru import logger
 
 from agent_engine.types import AgentState, Step
@@ -55,8 +57,14 @@ class AgentEngine:
             tool_whitelist=self.config.tool_whitelist_set,
         )
 
-    async def run(self, goal: str) -> AgentState:
-        """Execute the full decision loop for the given goal."""
+    async def run(self, goal: str, on_thought_chunk: Callable[[str], None] | None = None) -> AgentState:
+        """Execute the full decision loop for the given goal.
+
+        Args:
+            goal: The goal to achieve.
+            on_thought_chunk: Optional callback receiving each streaming
+                thought chunk during the THINK phase.
+        """
         self.state.start(goal)
         self.memory.set_system_prompt(
             f"You are an autonomous AI agent. Your goal is: {goal}\n\n"
@@ -86,7 +94,7 @@ class AgentEngine:
             step.phase = "think"
             try:
                 tool_schemas = self.tools.list_openai_schemas() if self.tools.list_tools() else None
-                response = await self.llm.chat(context, tool_schemas)
+                response = await self.llm.chat(context, tool_schemas, on_chunk=on_thought_chunk)
                 step.thought = response.content
                 self.memory.add("assistant", response.content)
 
