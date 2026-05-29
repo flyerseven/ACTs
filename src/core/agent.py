@@ -52,13 +52,15 @@ class Agent:
         llm = LLMAdapterFactory.create(config.model, api_key)
         return cls(config=config, llm=llm, token_tracker=token_tracker)
 
-    async def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None, session_id: str = "") -> str:
+    async def chat(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None,
+                   session_id: str = "", on_thought: Callable[[str], None] | None = None) -> str:
         response = await self.llm.chat(
             messages=messages,
             model=self.config.model.name,
             temperature=self.config.model.temperature,
             max_tokens=self.config.model.max_tokens,
             tools=tools,
+            on_thought=on_thought,
         )
         self._record_usage(response.usage, session_id=session_id)
         return response.content

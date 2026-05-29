@@ -37,12 +37,17 @@ class LLMAdapter(ABC):
         max_tokens: int = 4096,
         tools: list[dict[str, Any]] | None = None,
         on_chunk: Callable[[str], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Send messages and return a complete response.
 
-        If on_chunk is provided, it is called with each text chunk
+        If *on_chunk* is provided, it is called with each text chunk
         as it arrives (streaming), while still returning the complete
         response including tool calls at the end.
+
+        If *on_thought* is provided, it is called with reasoning/thinking
+        text as it arrives (supported by providers like DeepSeek that
+        return ``reasoning_content`` in SSE deltas).
         """
         ...
 

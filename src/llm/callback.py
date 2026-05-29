@@ -31,6 +31,7 @@ class CallbackAdapter(LLMAdapter):
         max_tokens: int = 4096,
         tools: list[dict[str, Any]] | None = None,
         on_chunk: Callable[[str], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         result = self._chat_fn(messages, tools)
         if hasattr(result, "__aiter__"):

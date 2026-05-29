@@ -66,6 +66,7 @@ class DeepSeekAdapter(LLMAdapter):
         max_tokens: int = 4096,
         tools: list[dict[str, Any]] | None = None,
         on_chunk: Callable[[str], None] | None = None,
+        on_thought: Callable[[str], None] | None = None,
         thinking: bool = True,
         reasoning_effort: str = "medium",
     ) -> LLMResponse:
@@ -76,6 +77,7 @@ class DeepSeekAdapter(LLMAdapter):
                 messages, model, temperature, max_tokens,
                 tools=tools, on_chunk=on_chunk,
                 thinking=thinking, reasoning_effort=reasoning_effort,
+                on_thought=on_thought,
             )
 
         payload = self._build_payload(

@@ -112,6 +112,7 @@ class AgentEngine:
         self._debug(f"  ╚{'═'*58}")
 
     async def run(self, goal: str, on_thought_chunk: Callable[[str], None] | None = None,
+                  on_thought: Callable[[str], None] | None = None,
                   system_prompt: str = "", enabled_skills: list[str] | None = None) -> AgentState:
         """Execute the full decision loop for the given goal.
 
@@ -119,6 +120,9 @@ class AgentEngine:
             goal: The goal to achieve.
             on_thought_chunk: Optional callback receiving each streaming
                 thought chunk during the THINK phase.
+            on_thought: Optional callback receiving each reasoning/thinking
+                text chunk (e.g. DeepSeek ``reasoning_content``) as it
+                arrives during the THINK phase.
             system_prompt: Optional agent personality/role prompt,
                 placed after the decision-loop rules as context.
             enabled_skills: Optional list of skill names enabled for this run.
@@ -240,6 +244,7 @@ class AgentEngine:
                     max_tokens=self.config.llm_max_tokens,
                     tools=tool_schemas,
                     on_chunk=on_thought_chunk,
+                    on_thought=on_thought,
                 )
                 t_think = time.monotonic() - t_think
                 step.thought = response.content

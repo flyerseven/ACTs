@@ -212,6 +212,10 @@ class EngineWorker(QThread):
         def on_chunk(chunk: str) -> None:
             self.thought_chunk.emit(step_index, chunk)
 
+        def on_thought_callback(text: str) -> None:
+            """Receive raw reasoning_content from DeepSeek adapter."""
+            self.thought_chunk.emit(step_index, text)
+
         orig_emit = engine.observer.emit
 
         def patched_emit(event) -> None:
@@ -245,6 +249,7 @@ class EngineWorker(QThread):
         engine.observer.emit = patched_emit
 
         state = await engine.run(self.content, on_thought_chunk=on_chunk,
+                                  on_thought=on_thought_callback,
                                   system_prompt=system_prompt,
                                   enabled_skills=agent.config.skills)
 
