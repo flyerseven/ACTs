@@ -2,11 +2,13 @@
 
 Usage:
     from agent_engine import AgentEngine, EngineConfig, ToolRegistry
-    from agent_engine.llm import OpenAIAdapter
+    from llm.factory import LLMAdapterFactory
+    from llm.deepseek import DeepSeekAdapter
 
+    adapter = DeepSeekAdapter(api_key="sk-...")
     engine = AgentEngine(
-        llm=OpenAIAdapter(api_key="sk-..."),
-        config=EngineConfig(max_steps=20),
+        llm=adapter,
+        config=EngineConfig(),
     )
     engine.tools.register_from_func(my_tool)
     state = await engine.run("Your goal")
