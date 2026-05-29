@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import time
 from pathlib import Path
 
 from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
@@ -220,15 +221,14 @@ class ThinkingWidget(QFrame):
     # ── Public API ──────────────────────────────────────────────────────
 
     def start_stream(self) -> None:
-        """Begin streaming mode — auto-expand and show animated dots."""
+        """Begin streaming mode — auto-expand for each new session."""
         self._streaming = True
-        import time
         self._start_time = time.time()
         self._thinking_text = ""
-        if not self._user_folded:
-            self._collapsed = False
-            self._body.setVisible(True)
-            self._toggle_btn.setText("▲ 收起")
+        self._user_folded = False
+        self._collapsed = False
+        self._body.setVisible(True)
+        self._toggle_btn.setText("▲ 收起")
         self._title_label.setText("正在思考...")
         self.setVisible(True)
 
@@ -247,7 +247,6 @@ class ThinkingWidget(QFrame):
         """Mark thinking as complete. Auto-collapse if user hasn't folded."""
         self._streaming = False
         if self._start_time:
-            import time
             elapsed = time.time() - self._start_time
             self._time_label.setText(f"耗时 {elapsed:.1f}s")
         self._title_label.setText("思考过程")
@@ -263,6 +262,10 @@ class ThinkingWidget(QFrame):
 
     def is_user_folded(self) -> bool:
         return self._user_folded
+
+    @property
+    def is_streaming(self) -> bool:
+        return self._streaming
 
     # ── Internals ───────────────────────────────────────────────────────
 
@@ -416,8 +419,7 @@ class ChatBubbleWidget(QFrame):
     def append_chunk(self, chunk: str, render_latex: bool = True) -> None:
         """Append a streaming chunk and re-render the full accumulated text."""
         # Auto-finalize thinking when main content starts streaming
-        if (self.thinking_widget.isVisible()
-            and getattr(self.thinking_widget, '_streaming', False)):
+        if self.thinking_widget.isVisible() and self.thinking_widget.is_streaming:
             self.thinking_widget.finalize()
         self._raw_text += chunk
         self._render_latex = self._render_latex or render_latex
