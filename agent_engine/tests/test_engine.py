@@ -1,7 +1,9 @@
 """Tests for agent_engine.engine."""
+import asyncio
 import pytest
 from agent_engine.engine import AgentEngine
-from agent_engine.llm import CallbackAdapter
+from llm.callback import CallbackAdapter
+from llm.base import LLMResponse
 from agent_engine.config import EngineConfig
 
 
@@ -28,37 +30,58 @@ class TestAgentEngine:
 
     @pytest.mark.asyncio
     async def test_max_steps_stops(self):
-        """Agent should stop when max_steps is reached."""
+        """Agent should stop when max_steps is reached.
+
+        Returns a tool call each iteration so the engine keeps looping
+        (no-tool-calls would be treated as completion).
+        """
+        def double(x):
+            return x * 2
+
         async def chat(messages, tools=None):
-            return "Still working on it..."
+            return LLMResponse(
+                content="Still working...",
+                tool_calls=[{"id": "1", "name": "double", "arguments": {"x": 2}}],
+            )
 
         engine = AgentEngine(
             llm=CallbackAdapter(chat),
             config=EngineConfig(max_steps=3, reflect_interval=10),
         )
+        engine.tools.register_from_func(double)
         state = await engine.run("An impossible task")
         assert state.status == "failed"
         assert len(state.steps) >= 3
 
     @pytest.mark.asyncio
     async def test_emergency_stop(self):
-        """Requesting stop should halt the agent."""
+        """Requesting stop should halt the agent.
+
+        Returns a tool call each iteration so the engine keeps looping
+        until the stop signal arrives.
+        """
+        def noop():
+            pass
+
+        stop_after = 5  # stop after this many LLM calls
+
         async def chat(messages, tools=None):
-            return "Working..."
+            nonlocal stop_after
+            stop_after -= 1
+            if stop_after <= 0:
+                engine.request_stop()
+            return LLMResponse(
+                content="Working...",
+                tool_calls=[{"id": "1", "name": "noop", "arguments": {}}],
+            )
 
         engine = AgentEngine(
             llm=CallbackAdapter(chat),
-            config=EngineConfig(max_steps=20, reflect_interval=10),
+            config=EngineConfig(max_steps=30, reflect_interval=100),
         )
+        engine.tools.register_from_func(noop)
 
-        import asyncio
-        async def delayed_stop():
-            await asyncio.sleep(0.2)
-            engine.request_stop()
-
-        task = asyncio.create_task(delayed_stop())
         state = await engine.run("Some goal")
-        await task
         assert state.status == "stopped"
 
     @pytest.mark.asyncio
