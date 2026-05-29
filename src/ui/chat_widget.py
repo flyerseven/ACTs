@@ -9,6 +9,7 @@ from PyQt6.QtCore import Qt, QTimer, QUrl, pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFrame,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -117,6 +118,172 @@ class StreamingBuffer:
         self._rendered = 0
 
 
+# ── Thinking process display ──────────────────────────────────────────────
+
+
+class ThinkingWidget(QFrame):
+    """Collapsible, semi-transparent thinking process display.
+
+    Renders above the assistant reply bubble.  Shows a 🧠 header with
+    expand/collapse toggle, and the thinking text at ~65% opacity.
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._thinking_text: str = ""
+        self._streaming: bool = False
+        self._user_folded: bool = False
+        self._collapsed: bool = False
+        self._start_time: float | None = None
+
+        self._build_ui()
+        self.setVisible(False)
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(4)
+
+        # ── Header bar ──
+        header = QWidget()
+        header.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(8, 3, 8, 3)
+        header_layout.setSpacing(6)
+
+        self._icon_label = QLabel("🧠")
+        self._icon_label.setFixedWidth(18)
+        header_layout.addWidget(self._icon_label)
+
+        self._title_label = QLabel("思考过程")
+        self._title_label.setStyleSheet(
+            "color: #a0a0a0; font-size: 11px; font-weight: 500; background: transparent;"
+        )
+        header_layout.addWidget(self._title_label)
+
+        self._time_label = QLabel("")
+        self._time_label.setStyleSheet(
+            "color: #6a6a6a; font-size: 9px; background: transparent;"
+        )
+        header_layout.addWidget(self._time_label)
+
+        header_layout.addStretch(1)
+
+        self._toggle_btn = QPushButton("▲ 收起")
+        self._toggle_btn.setFixedHeight(20)
+        self._toggle_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: transparent; color: #858585; border: 1px solid rgba(255,255,255,0.06);"
+            "  border-radius: 4px; padding: 0 8px; font-size: 10px;"
+            "}"
+            "QPushButton:hover { color: #cccccc; border-color: rgba(255,255,255,0.15); }"
+        )
+        self._toggle_btn.clicked.connect(self._toggle)
+        header_layout.addWidget(self._toggle_btn)
+
+        layout.addWidget(header)
+
+        # ── Content body ──
+        self._body = QTextBrowser()
+        self._body.setOpenExternalLinks(False)
+        self._body.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._body.setFrameShape(QFrame.Shape.NoFrame)
+        self._body.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse
+        )
+        self._body.setStyleSheet(
+            "QTextBrowser {"
+            "  background: transparent; border: none;"
+            "  color: #a0a0a0; font-size: 11.5px;"
+            "  font-style: italic; line-height: 1.55;"
+            "}"
+        )
+        self._body.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
+        layout.addWidget(self._body)
+
+        # ── Whole-widget styling ──
+        self.setStyleSheet(
+            "ThinkingWidget {"
+            "  border: 1px solid rgba(255,255,255,0.08);"
+            "  background: rgba(255,255,255,0.04);"
+            "  border-radius: 10px;"
+            "}"
+        )
+
+        # Opacity effect for semi-transparency
+        self._opacity = QGraphicsOpacityEffect(self)
+        self._opacity.setOpacity(0.65)
+        self.setGraphicsEffect(self._opacity)
+
+    # ── Public API ──────────────────────────────────────────────────────
+
+    def start_stream(self) -> None:
+        """Begin streaming mode — auto-expand and show animated dots."""
+        self._streaming = True
+        import time
+        self._start_time = time.time()
+        self._thinking_text = ""
+        if not self._user_folded:
+            self._collapsed = False
+            self._body.setVisible(True)
+            self._toggle_btn.setText("▲ 收起")
+        self._title_label.setText("正在思考...")
+        self.setVisible(True)
+
+    def append_chunk(self, chunk: str) -> None:
+        """Append a streaming chunk of thinking text."""
+        if self._streaming:
+            self._thinking_text += chunk
+            # Show plain text — no markdown rendering
+            self._body.setPlainText(self._thinking_text)
+            # Auto-scroll to bottom
+            bar = self._body.verticalScrollBar()
+            if bar:
+                bar.setValue(bar.maximum())
+
+    def finalize(self) -> None:
+        """Mark thinking as complete. Auto-collapse if user hasn't folded."""
+        self._streaming = False
+        if self._start_time:
+            import time
+            elapsed = time.time() - self._start_time
+            self._time_label.setText(f"耗时 {elapsed:.1f}s")
+        self._title_label.setText("思考过程")
+        if not self._user_folded:
+            self._collapse()
+
+    def set_collapsed(self, collapsed: bool) -> None:
+        """Programmatic collapse/expand."""
+        if collapsed:
+            self._collapse()
+        else:
+            self._expand()
+
+    def is_user_folded(self) -> bool:
+        return self._user_folded
+
+    # ── Internals ───────────────────────────────────────────────────────
+
+    def _toggle(self) -> None:
+        if self._collapsed:
+            self._expand()
+        else:
+            self._user_folded = True
+            self._collapse()
+
+    def _collapse(self) -> None:
+        self._collapsed = True
+        self._body.setVisible(False)
+        self._toggle_btn.setText("▼ 展开")
+
+    def _expand(self) -> None:
+        self._collapsed = False
+        self._body.setVisible(True)
+        self._toggle_btn.setText("▲ 收起")
+
+
 # ── Chat bubble ──────────────────────────────────────────────────────────
 
 
@@ -186,6 +353,10 @@ class ChatBubbleWidget(QFrame):
         if role == "user":
             self.copy_button.setVisible(False)
 
+        # ── thinking process (shown above content) ──
+        self.thinking_widget = ThinkingWidget()
+        self.thinking_widget.setVisible(False)
+
         # ── content area ──
         if self._use_web:
             from PyQt6.QtGui import QColor
@@ -222,6 +393,7 @@ class ChatBubbleWidget(QFrame):
         layout.setContentsMargins(12, 8, 12, 8)
         layout.setSpacing(6)
         layout.addLayout(header_layout)
+        layout.addWidget(self.thinking_widget)
         layout.addWidget(self.label)
 
         self._apply_role_style(role)
@@ -232,6 +404,9 @@ class ChatBubbleWidget(QFrame):
         """Replace the entire content and re-render."""
         self._render_latex = render_latex
         self._raw_text = content
+        # If this bubble has thinking, make sure it's finalized (non-streaming path)
+        if self.thinking_widget.isVisible():
+            self.thinking_widget.finalize()
         self._buffer.reset()
         if content:
             self._buffer.feed(content)
@@ -240,6 +415,10 @@ class ChatBubbleWidget(QFrame):
 
     def append_chunk(self, chunk: str, render_latex: bool = True) -> None:
         """Append a streaming chunk and re-render the full accumulated text."""
+        # Auto-finalize thinking when main content starts streaming
+        if (self.thinking_widget.isVisible()
+            and getattr(self.thinking_widget, '_streaming', False)):
+            self.thinking_widget.finalize()
         self._raw_text += chunk
         self._render_latex = self._render_latex or render_latex
         if not self._use_web:
@@ -263,6 +442,18 @@ class ChatBubbleWidget(QFrame):
         else:
             self._render()
         self._apply_width_constraints()
+
+    def start_thinking(self) -> None:
+        """Show and start the thinking widget in streaming mode."""
+        self.thinking_widget.start_stream()
+
+    def append_thinking(self, chunk: str) -> None:
+        """Append a thinking text chunk during streaming."""
+        self.thinking_widget.append_chunk(chunk)
+
+    def finalize_thinking(self) -> None:
+        """Complete the thinking stream — auto-collapses unless user-folded."""
+        self.thinking_widget.finalize()
 
     # ── Sizing ──────────────────────────────────────────────────────────
 
