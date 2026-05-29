@@ -59,7 +59,6 @@ class Agent:
             temperature=self.config.model.temperature,
             max_tokens=self.config.model.max_tokens,
             tools=tools,
-            stream=False,
         )
         self._record_usage(response.usage, session_id=session_id)
         return response.content
