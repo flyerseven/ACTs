@@ -1,18 +1,30 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, AsyncGenerator
+from dataclasses import dataclass, field
+from typing import Any, AsyncGenerator, Callable
 
 
 @dataclass
 class LLMResponse:
+    """Unified response from any LLM backend.
+
+    tool_calls uses a plain dict format:
+        [{"id": "call_1", "name": "search", "arguments": {"q": "test"}}]
+    """
     content: str
-    raw: dict[str, Any]
+    tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, int] | None = None
+    raw: dict[str, Any] = field(default_factory=dict)
 
 
 class LLMAdapter(ABC):
+    """Abstract interface for LLM backends.
+
+    Implement this to support any LLM provider. Both ``chat()`` and
+    ``chat_stream()`` are required.
+    """
+
     def __init__(self) -> None:
         self.last_usage: dict[str, int] | None = None
 
@@ -21,52 +33,30 @@ class LLMAdapter(ABC):
         self,
         messages: list[dict[str, Any]],
         model: str,
-        temperature: float,
-        max_tokens: int,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
         tools: list[dict[str, Any]] | None = None,
-        stream: bool = False,
+        on_chunk: Callable[[str], None] | None = None,
     ) -> LLMResponse:
-        raise NotImplementedError
+        """Send messages and return a complete response.
+
+        If on_chunk is provided, it is called with each text chunk
+        as it arrives (streaming), while still returning the complete
+        response including tool calls at the end.
+        """
+        ...
 
     @abstractmethod
     async def chat_stream(
         self,
         messages: list[dict[str, Any]],
         model: str,
-        temperature: float,
-        max_tokens: int,
+        temperature: float = 0.7,
+        max_tokens: int = 4096,
     ) -> AsyncGenerator[str, None]:
-        raise NotImplementedError
+        """Stream response tokens one at a time."""
+        ...
 
-
-class MockAdapter(LLMAdapter):
-    def __init__(self) -> None:
-        super().__init__()
-
-    async def chat(
-        self,
-        messages: list[dict[str, Any]],
-        model: str,
-        temperature: float,
-        max_tokens: int,
-        tools: list[dict[str, Any]] | None = None,
-        stream: bool = False,
-    ) -> LLMResponse:
-        last_user = ""
-        for msg in reversed(messages):
-            if msg.get("role") == "user":
-                last_user = str(msg.get("content", ""))
-                break
-        content = f"Mock response: {last_user}".strip()
-        return LLMResponse(content=content, raw={"mock": True})
-
-    async def chat_stream(
-        self,
-        messages: list[dict[str, Any]],
-        model: str,
-        temperature: float,
-        max_tokens: int,
-    ):
-        response = await self.chat(messages, model, temperature, max_tokens)
-        for chunk in response.content.split():
-            yield chunk + " "
+    async def close(self) -> None:
+        """Optional cleanup. Called to release resources (e.g. httpx client)."""
+        pass
