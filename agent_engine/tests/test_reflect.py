@@ -80,7 +80,7 @@ async def test_reflect_without_llm():
     mm = MemoryManager()
     mm.add("user", "analyze sales data")
 
-    from agent_engine.llm import CallbackAdapter
+    from llm.callback import CallbackAdapter
     async def fake_llm(messages, tools=None):
         return "continue"
     adapter = CallbackAdapter(fake_llm)
