@@ -90,6 +90,8 @@ class Session:
             recent = recent[-self.meta.context_keep_last :]
 
         for msg in recent:
+            if msg.role == "thinking":
+                continue
             messages.append({"role": msg.role, "content": msg.content})
         return messages
 
@@ -164,6 +166,8 @@ def summarize_messages(existing_summary: str, messages: Iterable[Message]) -> st
         lines.append("")
 
     for msg in messages:
+        if msg.role == "thinking":
+            continue
         lines.append(f"{msg.role}: {msg.content}")
 
     summary = "\n".join(lines)
