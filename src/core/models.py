@@ -59,6 +59,7 @@ class Message:
     content: str
     timestamp: str = field(default_factory=utc_now_iso)
     metadata: dict[str, Any] = field(default_factory=dict)
+    thinking: str | None = None
 
 
 def llm_config_from_dict(data: dict[str, Any]) -> LLMConfig:

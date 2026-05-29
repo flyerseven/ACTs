@@ -65,7 +65,11 @@ class Session:
             session.messages = list(parse_content_lines(legacy_path.read_text(encoding="utf-8")))
         return session
 
-    async def add_message(self, role: str, content: str) -> Message:
+    async def add_message(self, role: str, content: str,
+                          thinking: str | None = None) -> Message:
+        if thinking:
+            think_msg = Message(role="thinking", content=thinking)
+            self.messages.append(think_msg)
         msg = Message(role=role, content=content)
         self.messages.append(msg)
         self.meta.updated_at = utc_now_iso()

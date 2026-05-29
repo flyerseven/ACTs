@@ -17,3 +17,24 @@ def test_session_save_and_load(tmp_path: Path) -> None:
     loaded = asyncio.run(Session.load(session.meta.id, store))
     assert loaded.meta.name == "Test Session"
     assert len(loaded.messages) >= 2
+
+
+def test_add_message_with_thinking(tmp_path: Path) -> None:
+    """Thinking messages are persisted before assistant messages."""
+    store = FileStore(root_dir=tmp_path / "Acts")
+    store.ensure_structure()
+
+    session = asyncio.run(
+        Session.create("test", "agent", "agt1", store)
+    )
+    asyncio.run(session.add_message("user", "Hello"))
+    asyncio.run(session.add_message("assistant", "Response",
+                                     thinking="Let me think..."))
+    asyncio.run(session.save())
+
+    # Reload
+    loaded = asyncio.run(Session.load(session.meta.id, store))
+    roles = [m.role for m in loaded.messages]
+    assert roles == ["user", "thinking", "assistant"]
+    assert loaded.messages[1].content == "Let me think..."
+    assert loaded.messages[1].thinking is None  # thinking messages don't nest
