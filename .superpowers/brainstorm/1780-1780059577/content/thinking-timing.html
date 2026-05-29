@@ -1,0 +1,68 @@
+<h2>思考内容应该在什么时候显示？</h2>
+<p class="subtitle">两种时机选择 — 注意思考区域的表现差异</p>
+
+<div class="section">
+  <h3>当前聊天界面（现状）</h3>
+  <div class="mockup">
+    <div class="mockup-header">Chat View</div>
+    <div class="mockup-body" style="display:flex;flex-direction:column;gap:10px;padding:12px;">
+      <div style="align-self:flex-end;background:#007acc;color:#e0e0e0;padding:8px 16px;border-radius:12px;max-width:70%;">
+        Explain quantum computing in simple terms.
+      </div>
+      <div style="align-self:flex-start;background:#2d2d2d;color:#ccc;padding:8px 16px;border-radius:12px;max-width:80%;font-size:12px;line-height:1.5;">
+        <p>量子计算是一种利用量子力学原理...</p>
+      </div>
+    </div>
+  </div>
+  <p style="color:#858585;font-size:12px;margin-top:6px;">↑ 思考过程完全看不到</p>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>实时流式显示</h3>
+      <p>思考内容在模型生成时<strong>逐字</strong>显示在输出气泡上方，用户可以看到模型"正在想什么"。有打字机效果，思考完成后可折叠。</p>
+      <div style="margin-top:8px;background:#1e1e1e;border-radius:8px;padding:10px;border:1px solid #3c3c3c;">
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:10px;color:#858585;">💭 Thinking...</span>
+          <span style="font-size:9px;color:#6a6a6a;flex:1;">streaming</span>
+          <span style="font-size:10px;color:#4fc1ff;cursor:pointer;">▲ 收起</span>
+        </div>
+        <div style="color:#858585;font-size:11px;opacity:0.7;line-height:1.4;">
+          嗯，用户想了解量子计算...这是个好问题。我需要从简单概念开始，用比喻来解释。先讲量子比特的叠加态，再不提测量坍缩...
+        </div>
+      </div>
+      <div style="margin-top:6px;background:#2d2d2d;color:#ccc;padding:8px 16px;border-radius:12px;font-size:12px;line-height:1.5;">
+        <p>量子计算是一种利用量子力学原理...</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>完成后一次性展示</h3>
+      <p>思考过程在模型完成整个回复后<strong>一次性</strong>追加显示。回复先流式输出，思考块在最后才出现（已处于折叠状态）。</p>
+      <div style="margin-top:8px;background:#1e1e1e;border-radius:8px;padding:10px;border:1px solid #3c3c3c;">
+        <div style="display:flex;align-items:center;gap:6px;">
+          <span style="font-size:10px;color:#858585;">💭 思考过程</span>
+          <span style="font-size:10px;color:#4fc1ff;cursor:pointer;">▼ 展开</span>
+        </div>
+      </div>
+      <div style="margin-top:6px;background:#2d2d2d;color:#ccc;padding:8px 16px;border-radius:12px;font-size:12px;line-height:1.5;">
+        <p>量子计算是一种利用量子力学原理...</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px;">
+  <h3>对比</h3>
+  <table style="width:100%;font-size:12px;">
+    <tr><th></th><th>A. 实时流式</th><th>B. 完成后展示</th></tr>
+    <tr><td>用户体验</td><td>✅ 能看到模型"正在思考"</td><td>⚠️ 感觉不到思考过程</td></tr>
+    <tr><td>视觉干扰</td><td>⚠️ 流式内容可能分散注意力</td><td>✅ 不干扰主回复阅读</td></tr>
+    <tr><td>实现复杂度</td><td>中等</td><td>简单</td></tr>
+  </table>
+</div>

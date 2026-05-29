@@ -706,8 +706,12 @@ class SessionPanel(QWidget):
     def _on_engine_started(self, _content: str) -> None:
         pass  # startup banner already printed in _start_engine
 
-    def _on_engine_thought_chunk(self, step_index: int, _chunk: str) -> None:
-        pass  # too noisy; full thought logged in thought_done
+    def _on_engine_thought_chunk(self, step_index: int, chunk: str) -> None:
+        if not self._stream_bubble:
+            return
+        if not self._stream_bubble.thinking_widget.isVisible():
+            self._stream_bubble.start_thinking()
+        self._stream_bubble.append_thinking(chunk)
 
     def _on_engine_thought_done(self, step_index: int, full_text: str) -> None:
         preview = full_text[:300].replace("\n", " ")
@@ -734,6 +738,8 @@ class SessionPanel(QWidget):
 
     def _on_engine_step_end(self, step_index: int, _is_completed: bool) -> None:
         print(f"  [Step {step_index}] ── step complete", flush=True)
+        if self._stream_bubble and self._stream_bubble.thinking_widget.isVisible():
+            self._stream_bubble.finalize_thinking()
 
     def _on_engine_finished(self, status: str, total_steps: int, errors_json: str) -> None:
         import json
@@ -743,6 +749,8 @@ class SessionPanel(QWidget):
 
     def _on_engine_reply(self, reply: str) -> None:
         if self._stream_bubble:
+            if self._stream_bubble.thinking_widget.isVisible():
+                self._stream_bubble.finalize_thinking()
             self.chat_view.update_message(self._stream_bubble, reply, render_latex=True)
         self._enable_input()
         self._suppress_reload = True
@@ -753,6 +761,7 @@ class SessionPanel(QWidget):
     def _on_engine_failed(self, message: str) -> None:
         print(f"  Engine FAILED: {message}", flush=True, file=sys.stderr)
         if self._stream_bubble:
+            self._stream_bubble.thinking_widget.setVisible(False)
             self.chat_view.update_message(self._stream_bubble, f"[Engine Error] {message}", render_latex=False)
         self._enable_input()
         self._suppress_reload = True
