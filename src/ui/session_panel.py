@@ -5,8 +5,6 @@ import json
 
 from PyQt6.QtCore import Qt, QPropertyAnimation, QThread, QTimer, pyqtSignal
 
-from core.thought_recorder import ThoughtRecorder
-from ui.thought_view import ThoughtView
 from PyQt6.QtGui import QPainter, QColor, QBrush
 from PyQt6.QtWidgets import (
     QComboBox,
@@ -23,6 +21,8 @@ from PyQt6.QtWidgets import (
 
 from typing import TYPE_CHECKING
 
+import sys
+
 from core.agent import Agent
 from core.models import agent_config_from_dict, session_meta_from_dict, session_meta_to_dict, utc_now_iso
 from core.session import Session
@@ -31,11 +31,6 @@ from storage.file_store import FileStore
 from storage.yaml_io import read_yaml, write_yaml
 from ui.chat_widget import ChatBubbleWidget, ChatViewWidget
 from ui.session_create_panel import SessionCreateData, SessionCreateWidget
-
-from agent_engine.engine import AgentEngine
-from agent_engine.config import EngineConfig
-from agent_engine.tools import ToolRegistry
-from agent_engine.llm import OpenAIAdapter
 
 if TYPE_CHECKING:
     from core.token_tracker import TokenTracker
@@ -120,25 +115,8 @@ class ChatWorker(QThread):
         return reply
 
 
-class LoadSessionWorker(QThread):
-    loaded = pyqtSignal(object)  # Session
-    failed = pyqtSignal(str)
-
-    def __init__(self, session_id: str, store: FileStore) -> None:
-        super().__init__()
-        self.session_id = session_id
-        self.store = store
-
-    def run(self) -> None:
-        try:
-            session = asyncio.run(Session.load(self.session_id, self.store))
-            self.loaded.emit(session)
-        except Exception as exc:
-            self.failed.emit(str(exc))
-
-
 class EngineWorker(QThread):
-    """Runs AgentEngine in background with streaming thought chunks."""
+    """Runs AgentEngine for decision-core agents."""
 
     thought_chunk = pyqtSignal(int, str)
     thought_done = pyqtSignal(int, str)
@@ -148,7 +126,7 @@ class EngineWorker(QThread):
     step_end_signal = pyqtSignal(int, bool)
     engine_started = pyqtSignal(str)
     engine_finished = pyqtSignal(str, int, str)
-    engine_failed = pyqtSignal(str)
+    engine_failed_signal = pyqtSignal(str)
     finished_reply = pyqtSignal(str)
 
     def __init__(self, agent_id: str, content: str, session: Session,
@@ -166,34 +144,44 @@ class EngineWorker(QThread):
         try:
             asyncio.run(self._task())
         except Exception as exc:
-            self.engine_failed.emit(str(exc))
+            self.engine_failed_signal.emit(str(exc))
 
     async def _task(self) -> None:
-        config = agent_config_from_dict(read_yaml(
-            self.store.agent_yaml_path(self.agent_id)))
-        api_key = self.vault.resolve_key_ref(config.model.api_key_ref)
+        from core.agent import Agent
+        from core.skill import discover_skills
+        from pathlib import Path
 
-        engine_config = EngineConfig(
-            openai_model=config.model.name,
-            openai_base_url=config.model.base_url or "https://api.openai.com/v1",
-            openai_api_key=api_key,
-        )
-        llm = OpenAIAdapter(
-            api_key=api_key,
-            base_url=config.model.base_url or "https://api.openai.com/v1",
-            model=config.model.name,
-        )
-        tools = ToolRegistry()
-
-        try:
-            from agent_engine.tools.builtin import register_all
-            register_all(tools)
-        except ImportError:
-            pass
-
-        engine = AgentEngine(llm=llm, config=engine_config, tools=tools)
+        agent = await Agent.load(self.agent_id, self.store, self.vault, token_tracker=self.token_tracker)
+        api_key = self.vault.resolve_key_ref(agent.config.model.api_key_ref)
+        engine = agent.create_engine(api_key)
+        engine.config.debug = True  # enable stderr debug output for console visibility
 
         self.engine_started.emit(self.content)
+
+        # ── Build enhanced system prompt with skill extensions ──
+        enabled = agent.config.skills or []
+        system_prompt = agent.config.system_prompt
+        if enabled:
+            skills_dir = Path(__file__).resolve().parent.parent.parent / "skills"
+            discovered = list(discover_skills(skills_dir))
+            all_skills = {s.name: s for _, s in discovered}
+            extensions: list[str] = []
+            for skill_name in enabled:
+                skill = all_skills.get(skill_name)
+                if skill and skill.prompt_extension:
+                    extensions.append(skill.prompt_extension)
+                elif not skill:
+                    print(f"  [!] Skill '{skill_name}' not found in {skills_dir} (available: {list(all_skills.keys())})",
+                          flush=True, file=sys.stderr)
+            if extensions:
+                skill_blocks = "\n\n---\n\n".join(extensions)
+                if system_prompt.strip():
+                    system_prompt = f"{system_prompt.strip()}\n\n---\n\n{skill_blocks}"
+                else:
+                    system_prompt = skill_blocks
+
+        print(f"\n  SKILLS enabled: {enabled if enabled else '(none)'}", flush=True, file=sys.stderr)
+        print(f"  SYSTEM PROMPT ({len(system_prompt)} chars)", flush=True, file=sys.stderr)
 
         step_index = 0
 
@@ -232,18 +220,26 @@ class EngineWorker(QThread):
 
         engine.observer.emit = patched_emit
 
-        state = await engine.run(self.content, on_thought_chunk=on_chunk)
+        state = await engine.run(self.content, on_thought_chunk=on_chunk,
+                                  system_prompt=system_prompt,
+                                  enabled_skills=agent.config.skills)
 
-        # Emit thought_done for each step that has thought text (M1)
         for step in state.steps:
             if step.thought:
                 self.thought_done.emit(step.index, step.thought)
 
-        reply_parts = []
-        for step in state.steps:
+        # Extract the final answer from the last step's thought,
+        # stripping the DONE/FAILED sentinel that the engine uses internally.
+        last_thought = ""
+        for step in reversed(state.steps):
             if step.thought:
-                reply_parts.append(step.thought)
-        reply = "\n\n".join(reply_parts) if reply_parts else "Task completed."
+                last_thought = step.thought
+                break
+
+        import re
+        reply = re.sub(r'\b(DONE|FAILED)\b[:\s]*', '', last_thought, flags=re.IGNORECASE).strip()
+        if not reply:
+            reply = "Task completed."
 
         await self.session.add_message("assistant", reply)
         self.session.maybe_compress_context()
@@ -253,6 +249,23 @@ class EngineWorker(QThread):
             state.status, len(state.steps),
             json.dumps(state.errors, ensure_ascii=False))
         self.finished_reply.emit(reply)
+
+
+class LoadSessionWorker(QThread):
+    loaded = pyqtSignal(object)  # Session
+    failed = pyqtSignal(str)
+
+    def __init__(self, session_id: str, store: FileStore) -> None:
+        super().__init__()
+        self.session_id = session_id
+        self.store = store
+
+    def run(self) -> None:
+        try:
+            session = asyncio.run(Session.load(self.session_id, self.store))
+            self.loaded.emit(session)
+        except Exception as exc:
+            self.failed.emit(str(exc))
 
 
 class SessionPanel(QWidget):
@@ -267,7 +280,7 @@ class SessionPanel(QWidget):
         self.vault = vault
         self.token_tracker = token_tracker
         self.active_session: Session | None = None
-        self._worker: ChatWorker | None = None
+        self._worker: ChatWorker | EngineWorker | None = None
         self._stream_bubble: ChatBubbleWidget | None = None
         self._stream_text: str = ""
         self._suppress_reload: bool = False
@@ -282,10 +295,6 @@ class SessionPanel(QWidget):
         self._load_worker: LoadSessionWorker | None = None
         self._load_spinner: QWidget | None = None
         self._spinner_dots: LoadingDots | None = None
-        self._thought_view: ThoughtView | None = None
-        self._thought_recorder: ThoughtRecorder | None = None
-        self._engine_worker: EngineWorker | None = None
-        self._use_decision_core: bool = False
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -576,13 +585,10 @@ class SessionPanel(QWidget):
         self.chat_view.add_message("user", content, render_latex=True)
         self.input_box.clear()
 
-        # Check if agent has decision core enabled
         agent_config = agent_config_from_dict(
             read_yaml(self.store.agent_yaml_path(agent_id)))
-        self._use_decision_core = agent_config.enable_decision_core
-
-        if self._use_decision_core:
-            self._start_engine_stream(agent_id, content)
+        if agent_config.enable_decision_core:
+            self._start_engine(agent_id, content)
         else:
             self._stream_text = ""
             self._stream_bubble = self.chat_view.add_message(
@@ -604,6 +610,101 @@ class SessionPanel(QWidget):
         self._worker.finished_reply.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
         self._worker.start()
+
+    # ── Engine (decision-core) streaming ──────────────────────────────────
+
+    def _start_engine(self, agent_id: str, content: str) -> None:
+        if not self.active_session:
+            return
+        self.send_button.setEnabled(False)
+        self.input_box.setEnabled(False)
+        if self.session_combo:
+            self.session_combo.setEnabled(False)
+        if self.new_session_button:
+            self.new_session_button.setEnabled(False)
+
+        self._stream_text = ""
+        self._stream_bubble = self.chat_view.add_message(
+            "assistant", "", render_latex=False)
+
+        print("\n" + "=" * 50, flush=True)
+        print("  Decision Engine Started", flush=True)
+        print(f"  Goal: {content[:200]}", flush=True)
+        print("=" * 50, flush=True)
+
+        self._worker = EngineWorker(
+            agent_id, content, self.active_session,
+            self.store, self.vault, token_tracker=self.token_tracker)
+        self._worker.engine_started.connect(self._on_engine_started)
+        self._worker.thought_chunk.connect(self._on_engine_thought_chunk)
+        self._worker.thought_done.connect(self._on_engine_thought_done)
+        self._worker.tool_call_signal.connect(self._on_engine_tool_call)
+        self._worker.tool_result_signal.connect(self._on_engine_tool_result)
+        self._worker.reflection_signal.connect(self._on_engine_reflection)
+        self._worker.step_end_signal.connect(self._on_engine_step_end)
+        self._worker.engine_finished.connect(self._on_engine_finished)
+        self._worker.finished_reply.connect(self._on_engine_reply)
+        self._worker.engine_failed_signal.connect(self._on_engine_failed)
+        self._worker.start()
+
+    def _on_engine_started(self, _content: str) -> None:
+        pass  # startup banner already printed in _start_engine
+
+    def _on_engine_thought_chunk(self, step_index: int, _chunk: str) -> None:
+        pass  # too noisy; full thought logged in thought_done
+
+    def _on_engine_thought_done(self, step_index: int, full_text: str) -> None:
+        preview = full_text[:300].replace("\n", " ")
+        if len(full_text) > 300:
+            preview += "..."
+        print(f"  [Step {step_index}] THINK: {preview}", flush=True)
+
+    def _on_engine_tool_call(self, step_index: int, tool_name: str, args_json: str) -> None:
+        print(f"  [Step {step_index}] ACT → {tool_name}({args_json[:200]})", flush=True)
+
+    def _on_engine_tool_result(self, step_index: int, result: str, error: str, duration_ms: float) -> None:
+        if error:
+            print(f"  [Step {step_index}] TOOL ERROR ({duration_ms:.0f}ms): {error[:200]}", flush=True, file=sys.stderr)
+        else:
+            preview = result[:200].replace("\n", " ")
+            if len(result) > 200:
+                preview += "..."
+            print(f"  [Step {step_index}] RESULT ({duration_ms:.0f}ms): {preview}", flush=True)
+
+    def _on_engine_reflection(self, step_index: int, summary: str, is_stuck: bool) -> None:
+        tag = "STUCK" if is_stuck else "OK"
+        out = sys.stderr if is_stuck else sys.stdout
+        print(f"  [Step {step_index}] REFLECT [{tag}]: {summary[:200]}", flush=True, file=out)
+
+    def _on_engine_step_end(self, step_index: int, _is_completed: bool) -> None:
+        print(f"  [Step {step_index}] ── step complete", flush=True)
+
+    def _on_engine_finished(self, status: str, total_steps: int, errors_json: str) -> None:
+        import json
+        errors = json.loads(errors_json)
+        print(f"  Engine finished: status={status}, steps={total_steps}, errors={len(errors)}", flush=True)
+        print("=" * 50 + "\n", flush=True)
+
+    def _on_engine_reply(self, reply: str) -> None:
+        if self._stream_bubble:
+            self.chat_view.update_message(self._stream_bubble, reply, render_latex=True)
+        self._enable_input()
+        self._suppress_reload = True
+        self.refresh_sessions()
+        self._suppress_reload = False
+        self.sessions_changed.emit()
+
+    def _on_engine_failed(self, message: str) -> None:
+        print(f"  Engine FAILED: {message}", flush=True, file=sys.stderr)
+        if self._stream_bubble:
+            self.chat_view.update_message(self._stream_bubble, f"[Engine Error] {message}", render_latex=False)
+        self._enable_input()
+        self._suppress_reload = True
+        self.refresh_sessions()
+        self._suppress_reload = False
+        self.sessions_changed.emit()
+
+    # ── Simple chat streaming ─────────────────────────────────────────────
 
     def _on_chunk(self, chunk: str) -> None:
         self._stream_text += chunk
@@ -635,77 +736,6 @@ class SessionPanel(QWidget):
             self.session_combo.setEnabled(True)
         if self.new_session_button:
             self.new_session_button.setEnabled(True)
-
-    def _start_engine_stream(self, agent_id: str, content: str) -> None:
-        """Start the engine with thought process visualization."""
-        if not self.active_session:
-            return
-        self.send_button.setEnabled(False)
-        self.input_box.setEnabled(False)
-        if self.session_combo:
-            self.session_combo.setEnabled(False)
-        if self.new_session_button:
-            self.new_session_button.setEnabled(False)
-
-        # Create ThoughtRecorder (main thread QObject)
-        self._thought_recorder = ThoughtRecorder()
-
-        # Create and insert ThoughtView into chat layout
-        if self._thought_view is not None:
-            self._thought_view.hide()
-            self._thought_view.deleteLater()
-        self._thought_view = ThoughtView()
-        self._thought_view.set_recorder(self._thought_recorder)
-
-        # Insert into chat_view container (before the spacer at the end)
-        self.chat_view.container_layout.insertWidget(
-            self.chat_view.container_layout.count() - 1,
-            self._thought_view)
-
-        # Start engine worker
-        self._engine_worker = EngineWorker(
-            agent_id, content, self.active_session,
-            self.store, self.vault, token_tracker=self.token_tracker)
-
-        # Wire worker signals -> ThoughtRecorder slots
-        self._engine_worker.engine_started.connect(
-            self._thought_recorder.start_run)
-        self._engine_worker.thought_chunk.connect(
-            self._thought_recorder.on_thought_chunk)
-        self._engine_worker.thought_done.connect(
-            self._thought_recorder.on_thought_done)
-        self._engine_worker.tool_call_signal.connect(
-            lambda idx, name, args: self._thought_recorder.on_tool_call(
-                idx, name, json.loads(args)))
-        self._engine_worker.tool_result_signal.connect(
-            self._thought_recorder.on_tool_result)
-        self._engine_worker.reflection_signal.connect(
-            self._thought_recorder.on_reflection)
-        self._engine_worker.step_end_signal.connect(
-            self._thought_recorder.on_step_end)
-        self._engine_worker.engine_finished.connect(
-            lambda status, steps, errors: self._thought_recorder.finish_run(
-                status, json.loads(errors)))
-
-        # Wire worker signals -> SessionPanel handlers
-        self._engine_worker.finished_reply.connect(self._on_engine_finished)
-        self._engine_worker.engine_failed.connect(self._on_engine_failed)
-
-        self._engine_worker.start()
-
-    def _on_engine_finished(self, reply: str) -> None:
-        self._enable_input()
-        self._suppress_reload = True
-        self.refresh_sessions()
-        self._suppress_reload = False
-        self.sessions_changed.emit()
-
-    def _on_engine_failed(self, message: str) -> None:
-        self._enable_input()
-        self._suppress_reload = True
-        self.refresh_sessions()
-        self._suppress_reload = False
-        self.sessions_changed.emit()
 
     # ── Session loading ─────────────────────────────────────────────────
 
