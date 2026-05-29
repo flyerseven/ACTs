@@ -33,12 +33,16 @@ class SessionTreeWidget(QTreeWidget):
     session_rename_requested = pyqtSignal(str)
     session_edit_requested = pyqtSignal(str)
     session_delete_requested = pyqtSignal(str)
+    batch_selection_changed = pyqtSignal(int)  # number of checked sessions
+    group_batch_delete_requested = pyqtSignal(str)  # group_name
+    group_batch_move_requested = pyqtSignal(str)  # group_name
 
     def __init__(self, store: FileStore, parent=None):
         super().__init__(parent)
         self.store = store
         self._group_expanded = {}
         self._session_to_group = {}
+        self._batch_mode = False
 
         self.setColumnCount(1)
         self.setHeaderLabels(["Sessions"])
@@ -46,6 +50,7 @@ class SessionTreeWidget(QTreeWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._on_context_menu)
         self.itemClicked.connect(self._on_item_clicked)
+        self.itemChanged.connect(self._on_item_changed)
         self.itemExpanded.connect(self._on_item_expanded)
         self.itemCollapsed.connect(self._on_item_collapsed)
 
@@ -123,6 +128,9 @@ class SessionTreeWidget(QTreeWidget):
                 session_item = QTreeWidgetItem(group_item)
                 session_item.setText(0, f"{name}\n  {display_time}")
                 session_item.setData(0, Qt.ItemDataRole.UserRole, session_id)
+                if self._batch_mode:
+                    session_item.setFlags(session_item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+                    session_item.setCheckState(0, Qt.CheckState.Unchecked)
 
                 sf = session_item.font(0)
                 if sf.pointSize() > 0:
@@ -177,7 +185,53 @@ class SessionTreeWidget(QTreeWidget):
             return
         item_id = item.data(0, Qt.ItemDataRole.UserRole)
         if item_id and not item_id.startswith("__group__"):
+            if self._batch_mode:
+                # In batch mode, clicking toggles check state to avoid
+                # interfering with the checkbox click itself (handled by itemChanged).
+                return
             self.session_selected.emit(item_id)
+
+    def _on_item_changed(self, item: QTreeWidgetItem, column: int) -> None:
+        """Track checkbox state changes and emit batch_selection_changed."""
+        if not self._batch_mode:
+            return
+        item_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if item_id and not item_id.startswith("__group__"):
+            self._emit_checked_count()
+
+    def _emit_checked_count(self) -> None:
+        """Count checked session items and emit batch_selection_changed."""
+        count = len(self.get_checked_session_ids())
+        self.batch_selection_changed.emit(count)
+
+    # ── Batch mode ──────────────────────────────────────────────────────
+
+    def set_batch_mode(self, enabled: bool) -> None:
+        """Enter or exit batch management mode."""
+        if self._batch_mode == enabled:
+            return
+        self._batch_mode = enabled
+        if enabled:
+            self.setDragDropMode(self.DragDropMode.NoDragDrop)
+        else:
+            self.setDragDropMode(self.DragDropMode.InternalMove)
+        self.load_sessions()
+
+    def is_batch_mode(self) -> bool:
+        return self._batch_mode
+
+    def get_checked_session_ids(self) -> list[str]:
+        """Return list of session IDs whose checkboxes are checked."""
+        checked: list[str] = []
+        for i in range(self.topLevelItemCount()):
+            group_item = self.topLevelItem(i)
+            for j in range(group_item.childCount()):
+                session_item = group_item.child(j)
+                if session_item.checkState(0) == Qt.CheckState.Checked:
+                    sid = session_item.data(0, Qt.ItemDataRole.UserRole)
+                    if sid:
+                        checked.append(sid)
+        return checked
 
     def _on_item_expanded(self, item: QTreeWidgetItem) -> None:
         item_id = item.data(0, Qt.ItemDataRole.UserRole)
@@ -225,6 +279,27 @@ class SessionTreeWidget(QTreeWidget):
 
             clear_action = menu.addAction("删除分组")
             clear_action.triggered.connect(lambda: self._clear_group(group_name, item))
+
+            menu.addSeparator()
+
+            # Batch operations on group
+            batch_delete_action = menu.addAction("删除本组全部会话")
+            batch_delete_action.triggered.connect(
+                lambda: self.group_batch_delete_requested.emit(group_name))
+
+            batch_move_action = menu.addAction("移动本组到其他分组")
+            batch_move_action.triggered.connect(
+                lambda: self.group_batch_move_requested.emit(group_name))
+        else:
+            # Ungrouped group — still offer batch operations
+            menu.addSeparator()
+            batch_delete_action = menu.addAction("删除本组全部会话")
+            batch_delete_action.triggered.connect(
+                lambda: self.group_batch_delete_requested.emit(""))
+
+            batch_move_action = menu.addAction("移动本组到其他分组")
+            batch_move_action.triggered.connect(
+                lambda: self.group_batch_move_requested.emit(""))
 
         menu.exec(self.mapToGlobal(pos))
 

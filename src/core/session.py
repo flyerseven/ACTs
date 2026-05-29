@@ -66,11 +66,12 @@ class Session:
         return session
 
     async def add_message(self, role: str, content: str,
-                          thinking: str | None = None) -> Message:
+                          thinking: str | None = None,
+                          metadata: dict | None = None) -> Message:
         if thinking:
             think_msg = Message(role="thinking", content=thinking)
             self.messages.append(think_msg)
-        msg = Message(role=role, content=content)
+        msg = Message(role=role, content=content, metadata=metadata or {})
         self.messages.append(msg)
         self.meta.updated_at = utc_now_iso()
         return msg
@@ -131,7 +132,13 @@ class Session:
 def render_content_lines(meta: SessionMeta, messages: Iterable[Message]) -> str:
     lines = [f"# Session: {meta.name}", f"# Created: {meta.created_at}", ""]
     for msg in messages:
-        encoded = json.dumps(msg.content, ensure_ascii=True)
+        # Encode as {"c": content, "m": metadata} when metadata is present;
+        # otherwise use the legacy plain-string format for backward compat.
+        if msg.metadata:
+            entry = {"c": msg.content, "m": msg.metadata}
+        else:
+            entry = msg.content
+        encoded = json.dumps(entry, ensure_ascii=True)
         lines.append(f"[{msg.timestamp}] [{msg.role}] {encoded}")
         lines.append("")
     return "\n".join(lines)
@@ -146,14 +153,22 @@ def parse_content_lines(text: str) -> Iterable[Message]:
             timestamp = prefix[1:]
             role, body = content.split("] ", 1)
             role = role.lstrip("[")
-            decoded = body
+            metadata: dict = {}
             try:
                 loaded = json.loads(body)
-                if isinstance(loaded, str):
+                if isinstance(loaded, dict) and "c" in loaded:
+                    # New format: {"c": content, "m": metadata}
+                    decoded = loaded["c"]
+                    metadata = loaded.get("m", {})
+                elif isinstance(loaded, str):
+                    # Legacy format: plain string
                     decoded = loaded
-            except ValueError:
+                else:
+                    decoded = body
+            except (json.JSONDecodeError, ValueError):
                 decoded = body
-            yield Message(role=role, content=decoded, timestamp=timestamp)
+            yield Message(role=role, content=decoded, timestamp=timestamp,
+                          metadata=metadata)
         except ValueError:
             continue
 

@@ -1,0 +1,56 @@
+<h2>Session 批量管理 — 哪种交互方式更适合你？</h2>
+<p class="subtitle">考虑你的日常使用频率和操作习惯</p>
+
+<div class="options" data-multiselect>
+  <div class="option" data-choice="multi-select" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>多选模式 (Checkbox Multi-Select)</h3>
+      <p>在 Session 树列表中每项前加 checkbox，勾选后顶部出现批量操作工具栏（批量删除、批量移动分组、批量导出）。类似 Gmail/文件管理器的体验。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>精确控制选中哪些</li><li>符合直觉，无需学习</li><li>可跨分组多选</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>占用列表空间</li><li>需要额外 UI 元素</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="group-ops" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>分组级别操作 (Group-Level Batch)</h3>
+      <p>在分组标题上右键菜单增加批量操作选项："删除本组所有会话"、"移动本组到..."、"导出本组"。保持列表简洁。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>零 UI 变动</li><li>适合按分组管理的用户</li><li>操作简单直接</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>无法跨组或选择性操作</li><li>粒度太粗</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="both" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>两者结合 (Both)</h3>
+      <p>同时支持多选模式 + 分组级别批量操作。会话项可多选（checkbox），分组标题右键支持批量操作。功能最全面。</p>
+      <div class="pros-cons">
+        <div class="pros"><h4>Pros</h4><ul><li>覆盖所有使用场景</li><li>灵活度最高</li></ul></div>
+        <div class="cons"><h4>Cons</h4><ul><li>实现工作量最大</li><li>UI 元素较多</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>当前侧边栏结构（参考）</h3>
+  <div class="mockup">
+    <div class="mockup-header">Session Sidebar — 当前状态</div>
+    <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; color: #cccccc;">
+      <div style="color: #6a6a6a; margin-bottom: 4px;">▼ Work (3)</div>
+      <div style="padding-left: 16px; margin-bottom: 2px;">  Project Alpha<br>  <span style="color: #6a6a6a; font-size: 10px;">2025-05-28 14:30</span></div>
+      <div style="padding-left: 16px; margin-bottom: 2px;">  Bug Fix Session<br>  <span style="color: #6a6a6a; font-size: 10px;">2025-05-27 09:12</span></div>
+      <div style="padding-left: 16px; margin-bottom: 6px;">  Code Review<br>  <span style="color: #6a6a6a; font-size: 10px;">2025-05-26 16:45</span></div>
+      <div style="color: #6a6a6a; margin-bottom: 4px;">▼ Personal (1)</div>
+      <div style="padding-left: 16px; margin-bottom: 6px;">  Learning Notes<br>  <span style="color: #6a6a6a; font-size: 10px;">2025-05-25 20:00</span></div>
+      <div style="color: #6a6a6a;">▶ 未分组 (2)</div>
+    </div>
+  </div>
+</div>

@@ -1,6 +1,6 @@
 # ACTs
 
-Agent Creat Tools (ACTs) Phase 1 MVP scaffold.
+**Agent Creation Tools (ACTs)** Phase 1 MVP scaffold.
 
 ## Quick start
 

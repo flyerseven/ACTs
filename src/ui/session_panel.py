@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 
 from PyQt6.QtCore import Qt, QPropertyAnimation, QThread, QTimer, pyqtSignal
-
-from PyQt6.QtGui import QPainter, QColor, QBrush
 from PyQt6.QtWidgets import (
     QComboBox,
+    QFileDialog,
     QFrame,
     QGraphicsOpacityEffect,
     QHBoxLayout,
@@ -29,49 +29,12 @@ from core.session import Session
 from security.vault import Vault
 from storage.file_store import FileStore
 from storage.yaml_io import read_yaml, write_yaml
-from ui.chat_widget import ChatBubbleWidget, ChatViewWidget
+from ui.chat_widget import ChatBubbleWidget, ChatViewWidget, LoadingDots, ToolCallWidget
 from ui.session_create_panel import SessionCreateData, SessionCreateWidget
 
 if TYPE_CHECKING:
     from core.token_tracker import TokenTracker
 
-
-class LoadingDots(QWidget):
-    """Three pulsing dots in a wave, similar to GPT's loading indicator."""
-
-    DOT_COUNT = 3
-    DOT_SIZE = 8
-    DOT_GAP = 8
-    CYCLE_MS = 1200  # one full wave cycle
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        w = self.DOT_COUNT * self.DOT_SIZE + (self.DOT_COUNT - 1) * self.DOT_GAP
-        self.setFixedSize(w, self.DOT_SIZE + 4)
-        self.setSizePolicy(QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
-        self._phase = 0.0
-        self._timer = QTimer(self)
-        self._timer.timeout.connect(self._step)
-        self._timer.start(50)
-
-    def _step(self) -> None:
-        self._phase += 0.15
-        self.update()
-
-    def paintEvent(self, _event) -> None:
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        y = self.height() // 2
-        for i in range(self.DOT_COUNT):
-            offset = i * (2 * 3.14159 / self.DOT_COUNT)
-            v = (1.0 + __import__('math').sin(self._phase + offset)) / 2.0
-            alpha = int(60 + v * 180)  # 60-240 range for visible contrast
-            x = i * (self.DOT_SIZE + self.DOT_GAP) + self.DOT_SIZE // 2
-            p.setBrush(QBrush(QColor(148, 163, 184, alpha)))
-            p.setPen(Qt.PenStyle.NoPen)
-            p.drawEllipse(x - self.DOT_SIZE // 2, y - self.DOT_SIZE // 2,
-                          self.DOT_SIZE, self.DOT_SIZE)
-        p.end()
 
 
 class ChatWorker(QThread):
@@ -270,7 +233,22 @@ class EngineWorker(QThread):
         if not reply:
             reply = "Task completed."
 
-        await self.session.add_message("assistant", reply)
+        # Build tool calls metadata from engine state steps
+        tool_calls_data = []
+        for step in state.steps:
+            if step.tool_call is not None:
+                tc = step.tool_call
+                tool_calls_data.append({
+                    "name": tc.tool_name,
+                    "arguments": json.dumps(tc.arguments, ensure_ascii=False),
+                    "result": str(tc.result) if tc.result is not None else "",
+                    "error": tc.error or "",
+                    "duration_ms": tc.duration_ms,
+                    "step_index": step.index,
+                })
+
+        metadata = {"tool_calls": tool_calls_data} if tool_calls_data else None
+        await self.session.add_message("assistant", reply, metadata=metadata)
         self.session.maybe_compress_context()
         await self.session.save()
 
@@ -392,6 +370,26 @@ class SessionPanel(QWidget):
         self.chat_view = ChatViewWidget()
         chat_layout.addWidget(self.chat_view, stretch=1)
 
+        # ── File tags bar (shown when files are attached) ──
+        self._attached_files: list[str] = []
+        self._tag_widgets: list[QWidget] = []
+        self._file_tags_bar = QWidget()
+        self._file_tags_bar.setObjectName("fileTagsBar")
+        self._file_tags_bar.setStyleSheet(
+            "#fileTagsBar { background-color: #252526; border-top: 1px solid #3c3c3c; }"
+        )
+        self._file_tags_bar.setVisible(False)
+        self._file_tags_layout = QHBoxLayout(self._file_tags_bar)
+        self._file_tags_layout.setContentsMargins(16, 6, 16, 6)
+        self._file_tags_layout.setSpacing(6)
+        self._file_tags_label = QLabel("Attached:")
+        self._file_tags_label.setStyleSheet(
+            "color: #a0a0a0; background: transparent; border: none;"
+        )
+        self._file_tags_layout.addWidget(self._file_tags_label)
+        self._file_tags_layout.addStretch(1)
+        chat_layout.addWidget(self._file_tags_bar)
+
         # Input bar
         input_bar = QFrame()
         input_bar.setStyleSheet(
@@ -418,6 +416,22 @@ class SessionPanel(QWidget):
             "}"
         )
         input_layout.addWidget(self.input_box, stretch=1)
+
+        self._attach_button = QPushButton("+")
+        self._attach_button.setFixedSize(40, 40)
+        self._attach_button.setToolTip("Attach files — paths will be included in the prompt")
+        self._attach_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #3c3c3c; color: #a0a0a0;"
+            "  border: 1px solid #4a4a4a; border-radius: 8px;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #4a4a4a; color: #cccccc;"
+            "  border-color: #5a5a5a;"
+            "}"
+        )
+        self._attach_button.clicked.connect(self._on_attach_clicked)
+        input_layout.addWidget(self._attach_button)
 
         self.send_button = QPushButton("Send")
         self.send_button.setProperty("cssClass", "primary")
@@ -585,13 +599,34 @@ class SessionPanel(QWidget):
     # ── Messaging ───────────────────────────────────────────────────────
 
     def send_message(self) -> None:
+        try:
+            self._send_message_impl()
+        except Exception:
+            import traceback
+            traceback.print_exc()
+            raise
+
+    def _send_message_impl(self) -> None:
         content = self.input_box.toPlainText().strip()
-        if not content:
+        # Allow sending if files are attached even without text
+        if not content and not self._attached_files:
             return
         if self._worker and self._worker.isRunning():
             return
         if self._load_worker and self._load_worker.isRunning():
             return
+
+        # Build LLM prompt with full paths, and display content without them
+        display_content = content
+        llm_content = content
+        attached_filenames: list[str] = []
+        if self._attached_files:
+            attached_filenames = [os.path.basename(f) for f in self._attached_files]
+            file_lines = "\n".join(
+                f"[Attached file: {f}]" for f in self._attached_files
+            )
+            llm_content = f"{file_lines}\n\n{content}" if content else file_lines
+
         agent_id = self._current_agent_id()
         if not agent_id:
             self.chat_view.add_message("system", "No agent available. Create one first.")
@@ -608,27 +643,128 @@ class SessionPanel(QWidget):
             )
             self.refresh_sessions(select_latest=True)
             self.sessions_changed.emit()
-        asyncio.run(self.active_session.add_message("user", content))
+        asyncio.run(self.active_session.add_message("user", llm_content))
         asyncio.run(self.active_session.save())
 
-        self.chat_view.add_message("user", content, render_latex=True)
+        bubble = self.chat_view.add_message("user", display_content, render_latex=True)
+        if attached_filenames:
+            bubble.show_attached_files(attached_filenames)
         self.input_box.clear()
+        self._clear_file_tags()
 
         agent_config = agent_config_from_dict(
             read_yaml(self.store.agent_yaml_path(agent_id)))
         if agent_config.enable_decision_core:
-            self._start_engine(agent_id, content)
+            self._start_engine(agent_id, llm_content)
         else:
             self._stream_text = ""
             self._stream_bubble = self.chat_view.add_message(
                 "assistant", "", render_latex=False)
-            self._start_stream(agent_id, content)
+            self._start_stream(agent_id, llm_content)
+
+    # ── File attachment ──────────────────────────────────────────────────
+
+    def _on_attach_clicked(self) -> None:
+        """Open file dialog and add selected file paths."""
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Attach Files", "",
+            "All Files (*);;Text Files (*.txt *.py *.md *.json *.yaml *.yml *.xml *.csv *.log);;Images (*.png *.jpg *.jpeg *.gif *.svg)"
+        )
+        if not paths:
+            return
+        for path in paths:
+            if path not in self._attached_files:
+                self._attached_files.append(path)
+        self._update_attach_button()
+        self._rebuild_file_tags()
+
+    def _update_attach_button(self) -> None:
+        """Update the attach button text to show file count."""
+        n = len(self._attached_files)
+        if n > 0:
+            self._attach_button.setText(str(n))
+            self._attach_button.setToolTip(
+                "Attached files:\n" + "\n".join(
+                    f"  {os.path.basename(p)}" for p in self._attached_files
+                )
+            )
+        else:
+            self._attach_button.setText("+")
+            self._attach_button.setToolTip("Attach files — paths will be included in the prompt")
+
+    def _rebuild_file_tags(self) -> None:
+        """Rebuild file tag chips from _attached_files."""
+        for w in self._tag_widgets:
+            self._file_tags_layout.removeWidget(w)
+            w.hide()
+            w.deleteLater()
+        self._tag_widgets.clear()
+
+        if not self._attached_files:
+            self._file_tags_bar.setVisible(False)
+            return
+
+        self._file_tags_bar.setVisible(True)
+        for path in self._attached_files:
+            tag = self._make_file_tag(path)
+            self._tag_widgets.append(tag)
+            self._file_tags_layout.insertWidget(self._file_tags_layout.count() - 1, tag)
+
+    def _make_file_tag(self, path: str) -> QWidget:
+        """Create a single file tag chip with filename and X button."""
+        tag = QFrame()
+        tag.setStyleSheet(
+            "QFrame {"
+            "  background-color: #3c3c3c; border: 1px solid #5a5a5a;"
+            "  border-radius: 6px; padding: 2px 4px;"
+            "}"
+        )
+        tag.setToolTip(path)
+        tag_layout = QHBoxLayout(tag)
+        tag_layout.setContentsMargins(6, 2, 6, 2)
+        tag_layout.setSpacing(4)
+
+        name_label = QLabel(os.path.basename(path))
+        name_label.setStyleSheet(
+            "color: #cccccc; background: transparent; border: none;"
+        )
+        tag_layout.addWidget(name_label)
+
+        rm_btn = QPushButton("x")
+        rm_btn.setFixedSize(18, 18)
+        rm_btn.setStyleSheet(
+            "QPushButton {"
+            "  background: rgba(255,255,255,0.08); color: #b0b0b0; border: none;"
+            "  border-radius: 3px; font-size: 12px; font-weight: bold;"
+            "}"
+            "QPushButton:hover {"
+            "  background: rgba(255,80,80,0.5); color: #ffffff;"
+            "}"
+        )
+        rm_btn.clicked.connect(lambda checked=False, p=path: self._remove_file_tag(p))
+        tag_layout.addWidget(rm_btn)
+
+        return tag
+
+    def _remove_file_tag(self, path: str) -> None:
+        """Remove a single file from the attached list."""
+        if path in self._attached_files:
+            self._attached_files.remove(path)
+        self._update_attach_button()
+        self._rebuild_file_tags()
+
+    def _clear_file_tags(self) -> None:
+        """Clear all attached files."""
+        self._attached_files.clear()
+        self._update_attach_button()
+        self._rebuild_file_tags()
 
     def _start_stream(self, agent_id: str, content: str) -> None:
         if not self.active_session:
             return
         self.send_button.setEnabled(False)
         self.input_box.setEnabled(False)
+        self._attach_button.setEnabled(False)
         if self.session_combo:
             self.session_combo.setEnabled(False)
         if self.new_session_button:
@@ -658,6 +794,7 @@ class SessionPanel(QWidget):
             return
         self.send_button.setEnabled(False)
         self.input_box.setEnabled(False)
+        self._attach_button.setEnabled(False)
         if self.session_combo:
             self.session_combo.setEnabled(False)
         if self.new_session_button:
@@ -666,6 +803,9 @@ class SessionPanel(QWidget):
         self._stream_text = ""
         self._stream_bubble = self.chat_view.add_message(
             "assistant", "", render_latex=False)
+
+        # Reset tool call widget tracking for this new message
+        self._active_tool_widgets: dict[str, ToolCallWidget] = {}
 
         # Disconnect previous worker signals so handlers never fire twice.
         if self._worker is not None:
@@ -711,6 +851,8 @@ class SessionPanel(QWidget):
             return
         if not self._stream_bubble.thinking_widget.isVisible():
             self._stream_bubble.start_thinking()
+            # Server has responded — update loading status from "正在等待服务器返回"
+            self._stream_bubble.set_loading_status("正在生成...")
         self._stream_bubble.append_thinking(chunk)
 
     def _on_engine_thought_done(self, step_index: int, full_text: str) -> None:
@@ -720,16 +862,42 @@ class SessionPanel(QWidget):
         print(f"  [Step {step_index}] THINK: {preview}", flush=True)
 
     def _on_engine_tool_call(self, step_index: int, tool_name: str, args_json: str) -> None:
-        print(f"  [Step {step_index}] ACT → {tool_name}({args_json[:200]})", flush=True)
+        if not self._stream_bubble:
+            return
+        try:
+            tool_widget = self._stream_bubble.add_tool_call(tool_name, args_json)
+            key = f"{step_index}:{tool_name}"
+            if not hasattr(self, '_active_tool_widgets'):
+                self._active_tool_widgets: dict[str, ToolCallWidget] = {}
+            self._active_tool_widgets[key] = tool_widget
+            self.chat_view.scroll_to_bottom()
+        except Exception as exc:
+            print(f"  [!] Tool call widget error: {exc}", flush=True, file=sys.stderr)
 
     def _on_engine_tool_result(self, step_index: int, result: str, error: str, duration_ms: float) -> None:
-        if error:
-            print(f"  [Step {step_index}] TOOL ERROR ({duration_ms:.0f}ms): {error[:200]}", flush=True, file=sys.stderr)
-        else:
-            preview = result[:200].replace("\n", " ")
-            if len(result) > 200:
-                preview += "..."
-            print(f"  [Step {step_index}] RESULT ({duration_ms:.0f}ms): {preview}", flush=True)
+        if not self._stream_bubble:
+            return
+        try:
+            active = getattr(self, '_active_tool_widgets', {})
+            if not active:
+                return
+            # Find the matching tool call widget by step_index prefix
+            prefix = f"{step_index}:"
+            matched = False
+            for key, widget in active.items():
+                if key.startswith(prefix) and widget.status == "running":
+                    self._stream_bubble.update_tool_call_result(widget, result, error, duration_ms)
+                    matched = True
+                    break
+            if not matched:
+                # Fallback: find any running tool call widget
+                for key, widget in active.items():
+                    if widget.status == "running":
+                        self._stream_bubble.update_tool_call_result(widget, result, error, duration_ms)
+                        break
+            self.chat_view.scroll_to_bottom()
+        except Exception as exc:
+            print(f"  [!] Tool result widget error: {exc}", flush=True, file=sys.stderr)
 
     def _on_engine_reflection(self, step_index: int, summary: str, is_stuck: bool) -> None:
         tag = "STUCK" if is_stuck else "OK"
@@ -781,6 +949,8 @@ class SessionPanel(QWidget):
             return
         if not self._stream_bubble.thinking_widget.isVisible():
             self._stream_bubble.start_thinking()
+            # Server has responded — update loading status from "正在等待服务器返回"
+            self._stream_bubble.set_loading_status("正在生成...")
         self._stream_bubble.append_thinking(chunk)
 
     def _on_finished(self, reply: str) -> None:
@@ -809,6 +979,7 @@ class SessionPanel(QWidget):
     def _enable_input(self) -> None:
         self.send_button.setEnabled(True)
         self.input_box.setEnabled(True)
+        self._attach_button.setEnabled(True)
         if self.session_combo:
             self.session_combo.setEnabled(True)
         if self.new_session_button:
@@ -844,12 +1015,20 @@ class SessionPanel(QWidget):
 
         self._show_load_spinner()
 
+        # Disconnect previous load worker signals so handlers never fire twice.
+        if self._load_worker is not None:
+            try:
+                self._load_worker.loaded.disconnect()
+                self._load_worker.failed.disconnect()
+            except TypeError:
+                pass  # already disconnected
+
         self._load_worker = LoadSessionWorker(session_id, self.store)
         self._load_worker.loaded.connect(self._on_session_loaded)
         self._load_worker.failed.connect(self._on_session_load_failed)
         self._load_worker.start()
 
-    def _show_load_spinner(self) -> None:
+    def _show_load_spinner(self, status: str = "正在加载会话...") -> None:
         self._hide_load_spinner()
 
         spinner = QFrame(self._chat_page)
@@ -861,15 +1040,8 @@ class SessionPanel(QWidget):
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.setSpacing(8)
 
-        self._spinner_dots = LoadingDots()
+        self._spinner_dots = LoadingDots(text=status)
         layout.addWidget(self._spinner_dots, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        label = QLabel("Loading")
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        label.setStyleSheet(
-            "color: #858585; font-size: 13px; background: transparent; border: none;"
-        )
-        layout.addWidget(label)
 
         spinner.show()
         spinner.raise_()
@@ -897,7 +1069,7 @@ class SessionPanel(QWidget):
 
     def _render_session(self, session: Session) -> None:
         # If spinner is already visible, repurpose it as the render mask so there's
-        # no visual gap or double-loading appearance. Keep the "Loading..." text
+        # no visual gap or double-loading appearance. Keep the loading dots
         # animating until messages are fully rendered.
         if self._load_spinner is not None and self._load_spinner.isVisible():
             mask = self._load_spinner
@@ -930,6 +1102,15 @@ class SessionPanel(QWidget):
             bubble = self.chat_view.add_message(msg.role, msg.content, render_latex=True)
             if thinking_text:
                 bubble.thinking_widget.show_content(thinking_text)
+            # Restore tool calls from metadata
+            if msg.metadata and msg.metadata.get("tool_calls"):
+                for tc in msg.metadata["tool_calls"]:
+                    tw = bubble.add_tool_call(tc["name"], tc["arguments"])
+                    tw.set_result(
+                        tc.get("result", ""),
+                        tc.get("error", ""),
+                        tc.get("duration_ms", 0.0),
+                    )
             i += 1
         self.chat_view.setUpdatesEnabled(True)
         # Keep scrolling to bottom at increasing delays — WebEngine renders
@@ -969,23 +1150,41 @@ class SessionPanel(QWidget):
         self._render_anim.start()
 
     def _load_more_messages(self) -> None:
+        # Prevent re-entrant calls — prepend_message can trigger scrollbar
+        # value changes that would fire scrolled_to_top again mid-loop.
         if self._suppress_scroll_load:
             return
         if not self.active_session:
             return
         current = list(self.active_session.messages)
-        if len(current) > len(self._all_messages):
-            self._display_offset += len(current) - len(self._all_messages)
-            self._all_messages = current
-        else:
-            self._all_messages = current
+        # Always sync _all_messages so it reflects the latest session state.
+        # Do NOT adjust _display_offset for new messages — they were added at
+        # the bottom via add_message() and are already visible.  Only explicit
+        # _load_more_messages batches shrink _display_offset (see assignment
+        # below).  If offset reaches 0, all messages are in view.
+        self._all_messages = current
         if self._display_offset <= 0:
             return
         start = max(0, self._display_offset - self.PAGE_SIZE)
         batch = self._all_messages[start:self._display_offset]
-        for msg in reversed(batch):
-            self.chat_view.prepend_message(msg.role, msg.content, render_latex=True)
-        self._display_offset = start
+        if not batch:
+            return
+        self._suppress_scroll_load = True
+        try:
+            for msg in reversed(batch):
+                bubble = self.chat_view.prepend_message(msg.role, msg.content, render_latex=True)
+                # Restore tool calls from metadata (if any)
+                if msg.metadata and msg.metadata.get("tool_calls"):
+                    for tc in msg.metadata["tool_calls"]:
+                        tw = bubble.add_tool_call(tc["name"], tc["arguments"])
+                        tw.set_result(
+                            tc.get("result", ""),
+                            tc.get("error", ""),
+                            tc.get("duration_ms", 0.0),
+                        )
+            self._display_offset = start
+        finally:
+            self._suppress_scroll_load = False
 
     def edit_session_meta(self, session_id: str, **kwargs: object) -> None:
         meta_path = self.store.session_yaml_path(session_id)

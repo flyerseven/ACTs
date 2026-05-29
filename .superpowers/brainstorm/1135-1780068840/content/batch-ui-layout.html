@@ -1,0 +1,109 @@
+<h2>批量管理模式 — UI 布局和交互流程</h2>
+<p class="subtitle">方案 B：工具栏按钮切换，平时隐藏 checkbox</p>
+
+<div class="section">
+  <h3>Part 1: 正常模式 vs 批量模式</h3>
+  <div class="split">
+    <div class="mockup">
+      <div class="mockup-header">正常模式（当前已实现）</div>
+      <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; color: #cccccc;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:6px; border-bottom: 1px solid #3c3c3c;">
+          <span style="font-weight:bold; color:#e0e0e0;">Sessions</span>
+          <button class="mock-button" style="font-size:10px; padding:2px 8px;">批量管理</button>
+        </div>
+        <div style="color: #858585;">▼ Work (3)</div>
+        <div style="padding-left:12px; padding-top:2px;padding-bottom:2px; border-left: 2px solid transparent;">
+          Project Alpha<br><span style="color:#6a6a6a;font-size:10px;">2025-05-28</span>
+        </div>
+        <div style="padding-left:12px; padding-top:2px;padding-bottom:2px; border-left: 2px solid transparent;">
+          Bug Fix<br><span style="color:#6a6a6a;font-size:10px;">2025-05-27</span>
+        </div>
+        <div style="padding-left:12px; padding-top:2px;padding-bottom:2px; border-left: 2px solid transparent;">
+          Code Review<br><span style="color:#6a6a6a;font-size:10px;">2025-05-26</span>
+        </div>
+        <div style="color: #858585;">▼ Personal (2)</div>
+        <div style="padding-left:12px; padding-top:2px;padding-bottom:2px; border-left: 2px solid transparent;">
+          Learning<br><span style="color:#6a6a6a;font-size:10px;">2025-05-25</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="mockup">
+      <div class="mockup-header">批量管理模式</div>
+      <div class="mockup-body" style="font-family: monospace; font-size: 12px; line-height: 1.6; color: #cccccc;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; padding-bottom:6px; border-bottom: 1px solid #3c3c3c;">
+          <span style="font-weight:bold; color:#e0e0e0;">Sessions</span>
+          <button class="mock-button" style="font-size:10px; padding:2px 8px; background:#56a856;">完成</button>
+        </div>
+        <div style="color: #858585;">▼ Work (3)</div>
+        <div style="padding-left:4px; padding-top:2px;padding-bottom:2px; display:flex; align-items:center; gap:6px;">
+          <span style="display:inline-block; width:14px;height:14px; border:2px solid #007acc; border-radius:3px; background:#007acc; font-size:8px; text-align:center; line-height:14px; color:white;">✓</span>
+          Project Alpha<br><span style="color:#6a6a6a;font-size:10px;">2025-05-28</span>
+        </div>
+        <div style="padding-left:4px; padding-top:2px;padding-bottom:2px; display:flex; align-items:center; gap:6px;">
+          <span style="display:inline-block; width:14px;height:14px; border:2px solid #007acc; border-radius:3px; background:#007acc; font-size:8px; text-align:center; line-height:14px; color:white;">✓</span>
+          Bug Fix<br><span style="color:#6a6a6a;font-size:10px;">2025-05-27</span>
+        </div>
+        <div style="padding-left:4px; padding-top:2px;padding-bottom:2px; display:flex; align-items:center; gap:6px;">
+          <span style="display:inline-block; width:14px;height:14px; border:2px solid #5a5a5a; border-radius:3px;"></span>
+          Code Review<br><span style="color:#6a6a6a;font-size:10px;">2025-05-26</span>
+        </div>
+        <div style="color: #858585;">▼ Personal (2)</div>
+        <div style="padding-left:4px; padding-top:2px;padding-bottom:2px; display:flex; align-items:center; gap:6px;">
+          <span style="display:inline-block; width:14px;height:14px; border:2px solid #5a5a5a; border-radius:3px;"></span>
+          Learning<br><span style="color:#6a6a6a;font-size:10px;">2025-05-25</span>
+        </div>
+        <div style="margin-top:8px; padding-top:8px; border-top: 1px solid #3c3c3c; display:flex; gap:4px;">
+          <button class="mock-button" style="font-size:10px; padding:3px 10px; background:#c05050; border:none; color:white; border-radius:4px;">删除 (2)</button>
+          <button class="mock-button" style="font-size:10px; padding:3px 10px;">移动到...</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Part 2: 交互流程</h3>
+  <div class="mockup">
+    <div class="mockup-header">点击"批量管理"后的完整流程</div>
+    <div class="mockup-body">
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:13px;">
+        <div style="background:#2d2d2d; border:1px solid #3c3c3c; border-radius:8px; padding:12px; text-align:center; min-width:100px;">
+          <div style="color:#e0e0e0; font-weight:600; margin-bottom:4px;">① 进入模式</div>
+          <div style="color:#858585; font-size:11px;">工具栏→"批量管理"<br/>checkbox 出现<br/>操作栏出现</div>
+        </div>
+        <span style="color:#6a6a6a; font-size:16px;">→</span>
+        <div style="background:#2d2d2d; border:1px solid #3c3c3c; border-radius:8px; padding:12px; text-align:center; min-width:100px;">
+          <div style="color:#e0e0e0; font-weight:600; margin-bottom:4px;">② 勾选</div>
+          <div style="color:#858585; font-size:11px;">点击 checkbox<br/>选中会话<br/>计数实时更新</div>
+        </div>
+        <span style="color:#6a6a6a; font-size:16px;">→</span>
+        <div style="background:#2d2d2d; border:1px solid #3c3c3c; border-radius:8px; padding:12px; text-align:center; min-width:100px;">
+          <div style="color:#e0e0e0; font-weight:600; margin-bottom:4px;">③ 执行</div>
+          <div style="color:#858585; font-size:11px;">点"删除(N)"<br/>或"移动到..."<br/>弹出确认对话框</div>
+        </div>
+        <span style="color:#6a6a6a; font-size:16px;">→</span>
+        <div style="background:#2d2d2d; border:1px solid #3c3c3c; border-radius:8px; padding:12px; text-align:center; min-width:100px;">
+          <div style="color:#e0e0e0; font-weight:600; margin-bottom:4px;">④ 退出</div>
+          <div style="color:#858585; font-size:11px;">操作完成后<br/>自动退出批量模式<br/>或点"完成"</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>Part 3: 分组右键批量菜单（补充）</h3>
+  <div class="mockup">
+    <div class="mockup-header">分组标题右键 → 新增批量操作项</div>
+    <div class="mockup-body" style="font-family: monospace; font-size:12px; color:#cccccc; line-height:1.8;">
+      <div style="background:#252526; border:1px solid #3c3c3c; border-radius:8px; padding:8px 12px; width:220px;">
+        <div style="padding:4px 8px;">重命名分组</div>
+        <div style="padding:4px 8px;">删除分组</div>
+        <div style="margin:4px 0; border-top:1px solid #3c3c3c;"></div>
+        <div style="padding:4px 8px; background:#264f78; border-radius:4px;">删除本组全部会话</div>
+        <div style="padding:4px 8px;">移动本组到其他分组</div>
+      </div>
+    </div>
+  </div>
+</div>

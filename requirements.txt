@@ -10,3 +10,5 @@ markdown>=3.6
 matplotlib>=3.8
 pytest>=8.0
 pytest-asyncio>=0.23
+python-docx>=1.2
+lxml>=6.0

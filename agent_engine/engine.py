@@ -148,7 +148,9 @@ class AgentEngine:
         self.memory.add("user", goal)
         self.observer.emit(Event("start", {"goal": goal}))
 
-        self._enabled_skills = set(enabled_skills) if enabled_skills else None
+        # None = not specified → all tools allowed.  Empty list = explicitly
+        # disabled → no tools at all.
+        self._enabled_skills = set(enabled_skills) if enabled_skills is not None else None
         skills = enabled_skills or []
         registered_tools = self.tools.list_tools()
         registered_names = [t.name for t in registered_tools]

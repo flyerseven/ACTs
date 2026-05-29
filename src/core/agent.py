@@ -152,17 +152,17 @@ class Agent:
         tools = ToolRegistry()
         skill_map = self._get_skill_tool_map()
         skills = self.config.skills or []
-        has_skills = bool(skills)
-        if has_skills:
+        # Empty skills list means "no tools" — the user explicitly disabled all.
+        enabled = set(skills)
+        if skills:
             print(f"  [create_engine] enabled skills: {skills}", flush=True)
             print(f"  [create_engine] skill→tool map keys: {list(skill_map.keys())}", flush=True)
-        enabled = set(skills)
         for skill_name, funcs in skill_map.items():
-            if not has_skills or skill_name in enabled:
+            if skill_name in enabled:
                 for func in funcs:
                     print(f"  [create_engine] registering tool: {func.__name__} (from skill '{skill_name}')", flush=True)
                     tools.register_from_func(func)
-        if has_skills and not tools.list_tools():
+        if skills and not tools.list_tools():
             print(f"  [create_engine] WARNING: no tools matched! skills={list(enabled)}, map={list(skill_map.keys())}", flush=True)
 
         # Build skill→tool_names map for the engine's schema filtering.

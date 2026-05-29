@@ -32,7 +32,7 @@ from ui.agent_panel import AgentPanel
 from ui.session_panel import SessionPanel
 from ui.session_tree_widget import SessionTreeWidget
 from ui.skill_manager import SkillManager
-from core.models import agent_config_from_dict, session_meta_from_dict
+from core.models import agent_config_from_dict, session_meta_from_dict, session_meta_to_dict, utc_now_iso
 from storage.file_store import FileStore
 from security.vault import Vault
 from storage.yaml_io import read_yaml, write_yaml
@@ -245,12 +245,68 @@ class MainWindow(QMainWindow):
         self.group_filter_combo = QComboBox()
         self.group_filter_combo.setFixedHeight(32)
 
+        # ── Batch management toolbar ──
+        self.batch_toggle_button = QPushButton("批量管理")
+        self.batch_toggle_button.setFixedHeight(30)
+        self.batch_toggle_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #3c3c3c; border: 1px solid #555; border-radius: 6px;"
+            "  color: #cccccc; font-size: 11.5px; padding: 4px 12px;"
+            "}"
+            "QPushButton:hover { background-color: #4a4a4a; }"
+            "QPushButton:checked { background-color: #007acc; border-color: #007acc; color: #e0e0e0; }"
+        )
+        self.batch_toggle_button.setCheckable(True)
+
+        # ── Batch action bar (hidden by default) ──
+        self.batch_action_bar = QFrame()
+        self.batch_action_bar.setVisible(False)
+        action_layout = QHBoxLayout(self.batch_action_bar)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(6)
+
+        self.batch_delete_button = QPushButton("删除 (0)")
+        self.batch_delete_button.setFixedHeight(30)
+        self.batch_delete_button.setEnabled(False)
+        self.batch_delete_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #5a2020; border: none; border-radius: 6px;"
+            "  color: #e0a0a0; font-size: 11px; padding: 4px 10px;"
+            "}"
+            "QPushButton:hover { background-color: #702020; }"
+            "QPushButton:disabled { background-color: #333; color: #555; }"
+        )
+        action_layout.addWidget(self.batch_delete_button)
+
+        self.batch_move_button = QPushButton("移动到...")
+        self.batch_move_button.setFixedHeight(30)
+        self.batch_move_button.setEnabled(False)
+        self.batch_move_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #3c3c3c; border: none; border-radius: 6px;"
+            "  color: #cccccc; font-size: 11px; padding: 4px 10px;"
+            "}"
+            "QPushButton:hover { background-color: #4a4a4a; }"
+            "QPushButton:disabled { background-color: #333; color: #555; }"
+        )
+        action_layout.addWidget(self.batch_move_button)
+        action_layout.addStretch()
+
+        # ── Batch toolbar row ──
+        batch_toolbar_row = QWidget()
+        btr_layout = QHBoxLayout(batch_toolbar_row)
+        btr_layout.setContentsMargins(0, 0, 0, 0)
+        btr_layout.setSpacing(6)
+        btr_layout.addWidget(self.group_filter_combo, stretch=1)
+        btr_layout.addWidget(self.batch_toggle_button)
+
         session_panel_wrapper = QWidget()
         sp_layout = QVBoxLayout(session_panel_wrapper)
         sp_layout.setContentsMargins(0, 0, 0, 0)
         sp_layout.setSpacing(6)
-        sp_layout.addWidget(self.group_filter_combo)
+        sp_layout.addWidget(batch_toolbar_row)
         sp_layout.addWidget(self.session_list, stretch=1)
+        sp_layout.addWidget(self.batch_action_bar)
         sp_layout.addWidget(self.session_add_button)
         self.sidebar_stack.addWidget(session_panel_wrapper)
 
@@ -265,9 +321,15 @@ class MainWindow(QMainWindow):
         self.session_list.group_renamed.connect(lambda old, new: self.refresh_session_list())
         self.session_list.group_deleted.connect(lambda g: self.refresh_session_list())
         self.session_list.session_moved.connect(lambda sid, g: self.refresh_session_list())
+        self.session_list.batch_selection_changed.connect(self._on_batch_selection_changed)
+        self.session_list.group_batch_delete_requested.connect(self._on_group_batch_delete)
+        self.session_list.group_batch_move_requested.connect(self._on_group_batch_move)
         self.group_filter_combo.currentIndexChanged.connect(self._on_group_filter_changed)
         self.agent_add_button.clicked.connect(self._create_agent)
         self.session_add_button.clicked.connect(self._create_session)
+        self.batch_toggle_button.toggled.connect(self._toggle_batch_mode)
+        self.batch_delete_button.clicked.connect(self._on_batch_delete)
+        self.batch_move_button.clicked.connect(self._on_batch_move)
 
         return sidebar
 
@@ -285,6 +347,9 @@ class MainWindow(QMainWindow):
     def _set_active_tab(self, index: int) -> None:
         self.sidebar_stack.setCurrentIndex(index)
         self.stack.setCurrentIndex(index)
+        # Exit batch mode when switching away from sessions tab
+        if index != 2 and self.session_list.is_batch_mode():
+            self.batch_toggle_button.setChecked(False)
         if index == 0:
             self.tab_agents.setChecked(True)
         elif index == 1:
@@ -483,6 +548,243 @@ class MainWindow(QMainWindow):
         )
         if reply == QMessageBox.StandardButton.Yes:
             self.session_panel.delete_session(session_id)
+
+    # ── Batch management ─────────────────────────────────────────────────
+
+    def _toggle_batch_mode(self, checked: bool) -> None:
+        """Toggle batch management mode on/off."""
+        self.session_list.set_batch_mode(checked)
+        self.batch_action_bar.setVisible(checked)
+        self.session_add_button.setVisible(not checked)
+        if checked:
+            self.batch_toggle_button.setText("完成")
+            self._update_batch_buttons()
+        else:
+            self.batch_toggle_button.setText("批量管理")
+
+    def _on_batch_selection_changed(self, count: int) -> None:
+        """Update batch action bar when checkbox selection changes."""
+        self._update_batch_buttons()
+
+    def _update_batch_buttons(self) -> None:
+        """Update batch action button labels and enabled state."""
+        checked = self.session_list.get_checked_session_ids()
+        count = len(checked)
+        self.batch_delete_button.setText(f"删除 ({count})")
+        self.batch_move_button.setText(f"移动到... ({count})" if count else "移动到...")
+        self.batch_delete_button.setEnabled(count > 0)
+        self.batch_move_button.setEnabled(count > 0)
+
+    def _on_batch_delete(self) -> None:
+        """Batch delete checked sessions."""
+        checked = self.session_list.get_checked_session_ids()
+        if not checked:
+            return
+        reply = QMessageBox.question(
+            self,
+            "批量删除",
+            f"确定要删除选中的 {len(checked)} 个会话吗？\n此操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        success = 0
+        failed = 0
+        for sid in checked:
+            try:
+                if self.session_panel.active_session and self.session_panel.active_session.meta.id == sid:
+                    self.session_panel.active_session = None
+                    self.session_panel.chat_view.clear()
+                self.session_panel.delete_session(sid)
+                success += 1
+            except Exception:
+                failed += 1
+
+        self.refresh_session_list()
+        # Auto-exit batch mode after operation
+        self.batch_toggle_button.setChecked(False)
+
+        if failed > 0:
+            QMessageBox.warning(
+                self, "批量删除完成",
+                f"成功删除 {success} 个会话，{failed} 个失败。",
+            )
+
+    def _on_batch_move(self) -> None:
+        """Batch move checked sessions to a different group."""
+        checked = self.session_list.get_checked_session_ids()
+        if not checked:
+            return
+
+        # Collect all groups for selection
+        all_groups: set[str] = set()
+        for sid in self.store.list_sessions():
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                if meta.group:
+                    all_groups.add(meta.group)
+            except Exception:
+                continue
+
+        sorted_groups = sorted(all_groups)
+        items = ["未分组"] + sorted_groups + ["新建分组..."]
+        selected, ok = QInputDialog.getItem(
+            self, "批量移动到分组",
+            f"将 {len(checked)} 个会话移动到:",
+            items, 0, False,
+        )
+        if not ok:
+            return
+
+        if selected == "新建分组...":
+            new_group, ok = QInputDialog.getText(
+                self, "新建分组", "分组名称:",
+                QLineEdit.EchoMode.Normal,
+            )
+            if not ok or not new_group.strip():
+                return
+            selected = new_group.strip()
+        elif selected == "未分组":
+            selected = ""
+
+        success = 0
+        failed = 0
+        for sid in checked:
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                if meta.group == selected:
+                    continue  # skip if already in target group
+                meta.group = selected
+                meta.updated_at = utc_now_iso()
+                write_yaml(self.store.session_yaml_path(sid), session_meta_to_dict(meta))
+                success += 1
+            except Exception:
+                failed += 1
+
+        self.refresh_session_list()
+        # Auto-exit batch mode after operation
+        self.batch_toggle_button.setChecked(False)
+
+        if failed > 0:
+            QMessageBox.warning(
+                self, "批量移动完成",
+                f"成功移动 {success} 个会话，{failed} 个失败。",
+            )
+
+    def _on_group_batch_delete(self, group_name: str) -> None:
+        """Delete all sessions in a group."""
+        # Count sessions in group
+        sessions_in_group: list[str] = []
+        for sid in self.store.list_sessions():
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                g = meta.group.strip() if meta.group else ""
+                if g == group_name:
+                    sessions_in_group.append(sid)
+            except Exception:
+                continue
+
+        if not sessions_in_group:
+            return
+
+        label = group_name if group_name else "未分组"
+        reply = QMessageBox.question(
+            self,
+            "批量删除分组会话",
+            f"确定要删除分组 \"{label}\" 中的全部 {len(sessions_in_group)} 个会话吗？\n此操作不可撤销。",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        success = 0
+        failed = 0
+        for sid in sessions_in_group:
+            try:
+                if self.session_panel.active_session and self.session_panel.active_session.meta.id == sid:
+                    self.session_panel.active_session = None
+                    self.session_panel.chat_view.clear()
+                self.session_panel.delete_session(sid)
+                success += 1
+            except Exception:
+                failed += 1
+
+        self.refresh_session_list()
+        if failed > 0:
+            QMessageBox.warning(
+                self, "批量删除完成",
+                f"成功删除 {success} 个会话，{failed} 个失败。",
+            )
+
+    def _on_group_batch_move(self, group_name: str) -> None:
+        """Move all sessions in a group to another group."""
+        sessions_in_group: list[str] = []
+        for sid in self.store.list_sessions():
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                g = meta.group.strip() if meta.group else ""
+                if g == group_name:
+                    sessions_in_group.append(sid)
+            except Exception:
+                continue
+
+        if not sessions_in_group:
+            return
+
+        all_groups: set[str] = set()
+        for sid in self.store.list_sessions():
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                if meta.group:
+                    all_groups.add(meta.group)
+            except Exception:
+                continue
+
+        sorted_groups = sorted(all_groups)
+        items = ["未分组"] + sorted_groups + ["新建分组..."]
+        label = group_name if group_name else "未分组"
+        selected, ok = QInputDialog.getItem(
+            self, "批量移动分组会话",
+            f"将分组 \"{label}\" 中的 {len(sessions_in_group)} 个会话移动到:",
+            items, 0, False,
+        )
+        if not ok:
+            return
+
+        if selected == "新建分组...":
+            new_group, ok = QInputDialog.getText(
+                self, "新建分组", "分组名称:",
+                QLineEdit.EchoMode.Normal,
+            )
+            if not ok or not new_group.strip():
+                return
+            selected = new_group.strip()
+        elif selected == "未分组":
+            selected = ""
+
+        success = 0
+        failed = 0
+        for sid in sessions_in_group:
+            try:
+                meta = session_meta_from_dict(read_yaml(self.store.session_yaml_path(sid)))
+                if meta.group == selected:
+                    continue
+                meta.group = selected
+                meta.updated_at = utc_now_iso()
+                write_yaml(self.store.session_yaml_path(sid), session_meta_to_dict(meta))
+                success += 1
+            except Exception:
+                failed += 1
+
+        self.refresh_session_list()
+        if failed > 0:
+            QMessageBox.warning(
+                self, "批量移动完成",
+                f"成功移动 {success} 个会话，{failed} 个失败。",
+            )
 
     # ── Placeholder page ────────────────────────────────────────────────
 
