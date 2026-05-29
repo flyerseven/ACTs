@@ -53,8 +53,14 @@ class LLMAdapter(ABC):
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        on_thought: Callable[[str], None] | None = None,
     ) -> AsyncGenerator[str, None]:
-        """Stream response tokens one at a time."""
+        """Stream response tokens one at a time.
+
+        If *on_thought* is provided, it is called with reasoning/thinking
+        text as it arrives (supported by providers like DeepSeek that
+        return ``reasoning_content`` in SSE deltas).
+        """
         ...
 
     async def close(self) -> None:

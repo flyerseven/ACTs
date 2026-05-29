@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, TYPE_CHECKING
+from typing import Any, Callable, TYPE_CHECKING
 
 from core.models import AgentConfig, agent_config_from_dict
 from llm.base import LLMAdapter, LLMResponse
@@ -63,13 +63,15 @@ class Agent:
         self._record_usage(response.usage, session_id=session_id)
         return response.content
 
-    async def chat_stream(self, messages: list[dict[str, Any]], session_id: str = ""):
+    async def chat_stream(self, messages: list[dict[str, Any]], session_id: str = "",
+                          on_thought: Callable[[str], None] | None = None):
         try:
             async for chunk in self.llm.chat_stream(
                 messages=messages,
                 model=self.config.model.name,
                 temperature=self.config.model.temperature,
                 max_tokens=self.config.model.max_tokens,
+                on_thought=on_thought,
             ):
                 yield chunk
         finally:

@@ -121,6 +121,7 @@ class DeepSeekAdapter(LLMAdapter):
         max_tokens: int = 4096,
         thinking: bool = True,
         reasoning_effort: str = "medium",
+        on_thought: Callable[[str], None] | None = None,
     ) -> AsyncGenerator[str, None]:
         messages = self._sanitize_messages(messages)
         payload = self._build_payload(
@@ -145,6 +146,10 @@ class DeepSeekAdapter(LLMAdapter):
                     usage = data.get("usage")
                     if usage:
                         self.last_usage = usage
+                    # Capture reasoning/thinking content
+                    reasoning = delta.get("reasoning_content", "")
+                    if reasoning and on_thought:
+                        on_thought(reasoning)
                     content = delta.get("content", "")
                     if content:
                         yield content
@@ -242,6 +247,7 @@ class DeepSeekAdapter(LLMAdapter):
         on_chunk: Callable[[str], None],
         thinking: bool = True,
         reasoning_effort: str = "medium",
+        on_thought: Callable[[str], None] | None = None,
     ) -> LLMResponse:
         """Stream via SSE, delivering chunks via on_chunk while accumulating
         tool-call deltas.  Only retries connection setup (before any chunk
@@ -267,6 +273,11 @@ class DeepSeekAdapter(LLMAdapter):
                     async for data in self._iter_sse_deltas(resp):
                         try:
                             delta = data["choices"][0].get("delta", {})
+
+                            # Capture reasoning/thinking content
+                            reasoning = delta.get("reasoning_content", "")
+                            if reasoning and on_thought:
+                                on_thought(reasoning)
 
                             content_delta = delta.get("content", "")
                             if content_delta:

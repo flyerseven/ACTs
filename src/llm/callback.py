@@ -54,6 +54,7 @@ class CallbackAdapter(LLMAdapter):
         model: str,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        on_thought: Callable[[str], None] | None = None,
     ) -> AsyncGenerator[str, None]:
         result = self._chat_fn(messages, None)
         if hasattr(result, "__aiter__"):
