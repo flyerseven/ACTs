@@ -253,6 +253,15 @@ class ThinkingWidget(QFrame):
         if not self._user_folded:
             self._collapse()
 
+    def show_content(self, text: str) -> None:
+        """Display thinking content in completed, collapsed state (for history loading)."""
+        self._streaming = False
+        self._thinking_text = text
+        self._body.setPlainText(text)
+        self._title_label.setText("思考过程")
+        self._collapse()
+        self.setVisible(True)
+
     def set_collapsed(self, collapsed: bool) -> None:
         """Programmatic collapse/expand."""
         if collapsed:

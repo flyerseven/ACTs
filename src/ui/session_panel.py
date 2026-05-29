@@ -629,6 +629,16 @@ class SessionPanel(QWidget):
         if self.new_session_button:
             self.new_session_button.setEnabled(False)
 
+        # Disconnect previous worker signals so handlers never fire twice.
+        if self._worker is not None:
+            try:
+                self._worker.chunk_received.disconnect()
+                self._worker.thought_chunk.disconnect()
+                self._worker.finished_reply.disconnect()
+                self._worker.failed.disconnect()
+            except TypeError:
+                pass  # already disconnected
+
         self._worker = ChatWorker(agent_id, content, self.active_session, self.store, self.vault, token_tracker=self.token_tracker)
         self._worker.chunk_received.connect(self._on_chunk)
         self._worker.thought_chunk.connect(self._on_thought_chunk)
@@ -905,11 +915,7 @@ class SessionPanel(QWidget):
                 msg = msgs[i]
             bubble = self.chat_view.add_message(msg.role, msg.content, render_latex=True)
             if thinking_text:
-                bubble.thinking_widget._thinking_text = thinking_text
-                bubble.thinking_widget._body.setPlainText(thinking_text)
-                bubble.thinking_widget._title_label.setText("思考过程")
-                bubble.thinking_widget.set_collapsed(True)
-                bubble.thinking_widget.setVisible(True)
+                bubble.thinking_widget.show_content(thinking_text)
             i += 1
         self.chat_view.setUpdatesEnabled(True)
         # Keep scrolling to bottom at increasing delays — WebEngine renders
