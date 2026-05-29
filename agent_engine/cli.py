@@ -7,9 +7,11 @@ import json
 import sys
 
 from agent_engine.engine import AgentEngine
-from agent_engine.llm import OpenAIAdapter
 from agent_engine.config import EngineConfig
 from agent_engine.builtin_tools import calculate, read_file, write_file, web_search, execute_python
+
+from llm.factory import LLMAdapterFactory
+from core.models import LLMConfig
 
 
 def build_engine(args) -> AgentEngine:
@@ -17,22 +19,24 @@ def build_engine(args) -> AgentEngine:
     config = EngineConfig(
         max_steps=args.max_steps,
         reflect_interval=args.reflect_interval,
-        openai_api_key=args.api_key or "",
-        openai_base_url=args.base_url,
-        openai_model=args.model,
+        llm_api_key=args.api_key or "",
+        llm_base_url=args.base_url,
+        llm_model=args.model,
         log_format="json" if args.json_log else "text",
         workspace_dir=args.workspace,
+        debug=args.debug,
     )
 
     if not args.api_key:
-        print("No API key provided. Use --api-key or set AGENT_ENGINE_OPENAI_API_KEY env var.")
+        print("No API key provided. Use --api-key or set AGENT_ENGINE_LLM_API_KEY env var.")
         sys.exit(1)
 
-    adapter = OpenAIAdapter(
-        api_key=args.api_key,
+    llm_config = LLMConfig(
+        provider="deepseek",
+        name=args.model,
         base_url=args.base_url,
-        model=args.model,
     )
+    adapter = LLMAdapterFactory.create(llm_config, args.api_key)
 
     engine = AgentEngine(llm=adapter, config=config)
 
@@ -119,14 +123,15 @@ def main():
     run_parser.add_argument("goal", help="The goal/task for the agent")
     run_parser.add_argument("--max-steps", type=int, default=50)
     run_parser.add_argument("--reflect-interval", type=int, default=3)
-    run_parser.add_argument("--model", default="gpt-4o")
+    run_parser.add_argument("--model", default="deepseek-v4-pro")
     run_parser.add_argument("--api-key", default="")
-    run_parser.add_argument("--base-url", default="https://api.openai.com/v1")
+    run_parser.add_argument("--base-url", default="https://api.deepseek.com")
     run_parser.add_argument("--tools", default="all")
     run_parser.add_argument("--workspace", default="./workspace")
     run_parser.add_argument("--output", default="")
     run_parser.add_argument("--mermaid", default="")
     run_parser.add_argument("--json-log", action="store_true")
+    run_parser.add_argument("--debug", "-d", action="store_true", help="Enable real-time debug output to stderr")
 
     # Tools
     sub.add_parser("tools", help="List available tools")
