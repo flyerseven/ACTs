@@ -25,9 +25,12 @@ class EngineConfig(BaseSettings):
     )
 
     # -- LLM --
-    openai_api_key: str = ""
-    openai_base_url: str = "https://api.openai.com/v1"
-    openai_model: str = "gpt-4o"
+    llm_provider: str = "deepseek"
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.deepseek.com"
+    llm_model: str = "deepseek-v4-pro"
+    llm_temperature: float = 0.7
+    llm_max_tokens: int = 4096
 
     # -- Safety --
     max_steps: int = 50
@@ -43,6 +46,7 @@ class EngineConfig(BaseSettings):
     # -- Logging --
     log_level: str = "INFO"
     log_format: Literal["text", "json"] = "text"
+    debug: bool = False
 
     # -- Workspace --
     workspace_dir: str = "./workspace"
