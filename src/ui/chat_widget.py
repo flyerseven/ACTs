@@ -398,7 +398,8 @@ class ChatBubbleWidget(QFrame):
             self.label.setMinimumWidth(0)
             self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
-        self.set_content(content, render_latex=True)
+        # set_content() is called by add_message / prepend_message right after
+        # construction — calling it here too would render twice per bubble.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
         layout = QVBoxLayout(self)

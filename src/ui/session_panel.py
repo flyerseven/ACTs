@@ -844,6 +844,14 @@ class SessionPanel(QWidget):
 
         self._show_load_spinner()
 
+        # Disconnect previous load worker signals so handlers never fire twice.
+        if self._load_worker is not None:
+            try:
+                self._load_worker.loaded.disconnect()
+                self._load_worker.failed.disconnect()
+            except TypeError:
+                pass  # already disconnected
+
         self._load_worker = LoadSessionWorker(session_id, self.store)
         self._load_worker.loaded.connect(self._on_session_loaded)
         self._load_worker.failed.connect(self._on_session_load_failed)
@@ -969,23 +977,32 @@ class SessionPanel(QWidget):
         self._render_anim.start()
 
     def _load_more_messages(self) -> None:
+        # Prevent re-entrant calls — prepend_message can trigger scrollbar
+        # value changes that would fire scrolled_to_top again mid-loop.
         if self._suppress_scroll_load:
             return
         if not self.active_session:
             return
         current = list(self.active_session.messages)
-        if len(current) > len(self._all_messages):
-            self._display_offset += len(current) - len(self._all_messages)
-            self._all_messages = current
-        else:
-            self._all_messages = current
+        # Always sync _all_messages so it reflects the latest session state.
+        # Do NOT adjust _display_offset for new messages — they were added at
+        # the bottom via add_message() and are already visible.  Only explicit
+        # _load_more_messages batches shrink _display_offset (see assignment
+        # below).  If offset reaches 0, all messages are in view.
+        self._all_messages = current
         if self._display_offset <= 0:
             return
         start = max(0, self._display_offset - self.PAGE_SIZE)
         batch = self._all_messages[start:self._display_offset]
-        for msg in reversed(batch):
-            self.chat_view.prepend_message(msg.role, msg.content, render_latex=True)
-        self._display_offset = start
+        if not batch:
+            return
+        self._suppress_scroll_load = True
+        try:
+            for msg in reversed(batch):
+                self.chat_view.prepend_message(msg.role, msg.content, render_latex=True)
+            self._display_offset = start
+        finally:
+            self._suppress_scroll_load = False
 
     def edit_session_meta(self, session_id: str, **kwargs: object) -> None:
         meta_path = self.store.session_yaml_path(session_id)

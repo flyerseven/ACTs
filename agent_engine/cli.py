@@ -84,7 +84,8 @@ def cmd_tools(args) -> None:
     """List available builtin tools."""
     print("Builtin tools:")
     print("  calculator   - Safe mathematical expression evaluation")
-    print("  read_file    - Read a file from the workspace")
+    print("  read_file    - Read a file (absolute path = full filesystem; relative = workspace)")
+    print("  list_files   - List files in a directory (absolute or workspace-relative)")
     print("  write_file   - Write content to a file in the workspace")
     print("  web_search   - Search the web via DuckDuckGo")
     print("  code_exec    - Execute Python code in an isolated subprocess")
