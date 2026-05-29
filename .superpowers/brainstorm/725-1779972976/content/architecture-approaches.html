@@ -1,0 +1,40 @@
+<h2>三种架构方案对比</h2>
+<p class="subtitle">选择一个作为 Agent 决策引擎的顶层架构</p>
+
+<div class="options">
+  <div class="option" data-choice="a" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>极简单循环 &mdash; 一个 AgentLoop 类驱动一切</h3>
+      <p>所有逻辑集中在一个类中：状态机、工具字典、消息列表、循环逻辑。整个引擎只有一个核心文件。</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>优点</h4><ul><li>极简，~300 行核心代码</li><li>理解成本最低</li><li>调试直观</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>难以扩展</li><li>各部分耦合</li><li>无法独立测试子模块</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="b" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>模块化组件 &mdash; 每个关注点独立为类（推荐）</h3>
+      <p>DecisionLoop / StateManager / ToolRegistry / MemoryManager / Reflector / Observer 各司其职，通过明确定义的接口协作。</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>优点</h4><ul><li>高内聚低耦合，每个组件可独立测试</li><li>扩展性好，可替换任意组件</li><li>决策过程完全透明</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>文件更多（~8 个核心文件）</li><li>需要设计接口</li></ul></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="option" data-choice="c" onclick="toggleSelect(this)">
+    <div class="letter">C</div>
+    <div class="content">
+      <h3>事件驱动管道 &mdash; 拦截器链 + 事件总线</h3>
+      <p>每个决策环节是管道中的一个处理器，通过事件总线通信。用户可以任意插入/移除中间件。</p>
+      <div class="pros-cons" style="margin-top:12px">
+        <div class="pros"><h4>优点</h4><ul><li>最大灵活性，步骤可重排</li><li>插件化，第三方可贡献中间件</li></ul></div>
+        <div class="cons"><h4>缺点</h4><ul><li>过度设计，v1 不需要</li><li>事件驱动调试困难</li><li>性能开销</li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>

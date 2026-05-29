@@ -12,12 +12,13 @@ class TestToolRegistry:
         names = [t.name for t in reg.list_tools()]
         assert "test" in names
 
-    def test_register_duplicate_raises(self):
+    def test_register_duplicate_skipped(self):
         reg = ToolRegistry()
         td = ToolDef(name="test", description="d", parameters={})
         reg.register(td)
-        with pytest.raises(ValueError, match="already registered"):
-            reg.register(td)
+        # Duplicate registration is a silent no-op, not an error.
+        reg.register(td)
+        assert len(reg.list_tools()) == 1
 
     def test_unregister(self):
         reg = ToolRegistry()

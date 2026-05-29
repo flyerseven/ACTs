@@ -1,0 +1,105 @@
+<h2>架构总览 &mdash; 模块化 Agent 决策引擎</h2>
+<p class="subtitle">方案 B：各组件独立，接口清晰，决策透明</p>
+
+<div class="section">
+  <h3>核心组件（6 个模块）</h3>
+  <div class="mockup">
+    <div class="mockup-header">agent_engine/ 目录结构</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:13px;line-height:1.8">
+      agent_engine/<br>
+      ├── engine.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← DecisionLoop 主循环（观察→思考→行动→反思）</span><br>
+      ├── state.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← StateManager 状态跟踪</span><br>
+      ├── tools.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← ToolRegistry 工具注册/调用/验证</span><br>
+      ├── memory.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← MemoryManager 短期记忆 + 摘要压缩</span><br>
+      ├── reflect.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← Reflector 反思与自我修正</span><br>
+      ├── observe.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← Observer 日志/回调/Mermaid/指标</span><br>
+      ├── safety.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← 安全检查：步数限制/白名单/钩子</span><br>
+      ├── llm.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← LLM 适配器（内置 OpenAI + 自定义回调）</span><br>
+      ├── types.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← 共享 Pydantic 模型</span><br>
+      ├── config.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← 全局配置</span><br>
+      └── builtin_tools/<br>
+      &nbsp;&nbsp;&nbsp;&nbsp;├── search.py &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← 网络搜索</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;├── calculator.py &nbsp;<span style="color:#888">← 计算器</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;├── files.py &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">← 文件读写</span><br>
+      &nbsp;&nbsp;&nbsp;&nbsp;└── code_exec.py &nbsp;&nbsp;<span style="color:#888">← 代码执行</span>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>决策循环数据流</h3>
+  <div class="mockup" style="margin-top: 0;">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+┌──────────┐
+│ 用户输入  │  目标: "帮我分析 data.csv 并生成报告"
+└────┬─────┘
+     ▼
+╔══════════════════════════════════════════════════╗
+║              DecisionLoop (engine.py)            ║
+║                                                  ║
+║   ┌──────────┐    ┌──────────┐    ┌──────────┐  ║
+║   │ OBSERVE  │───▶│  THINK   │───▶│   ACT    │  ║
+║   │ 读状态   │    │ LLM推理  │    │ 执行工具  │  ║
+║   └──────────┘    └──────────┘    └──────────┘  ║
+║         ▲                               │       ║
+║         │          ┌──────────┐         │       ║
+║         └──────────│ REFLECT  │◀────────┘       ║
+║                    │ 每3步反思 │                 ║
+║                    └──────────┘                 ║
+║                                                  ║
+║   停止条件: 目标完成 / 步数耗尽 / 紧急停止       ║
+╚══════════════════════════════════════════════════╝
+     │          │          │          │
+     ▼          ▼          ▼          ▼
+┌─────────┐┌─────────┐┌─────────┐┌─────────┐
+│ State   ││ Memory  ││ Tool    ││ Safety  │
+│ Manager ││ Manager ││ Registry││ Check   │
+└─────────┘└─────────┘└─────────┘└─────────┘
+     │          │          │          │
+     └──────────┴──────────┴──────────┘
+                      │
+                      ▼
+               ┌─────────────┐
+               │  Observer   │  → 终端日志 / 回调 / Mermaid图 / 指标
+               └─────────────┘
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>关键设计决策</h3>
+  <table style="width:100%;border-collapse:collapse;font-size:14px">
+    <tr style="background:#2a2a3a">
+      <th style="padding:8px 12px;text-align:left">设计点</th>
+      <th style="padding:8px 12px;text-align:left">决策</th>
+      <th style="padding:8px 12px;text-align:left">理由</th>
+    </tr>
+    <tr style="border-bottom:1px solid #333">
+      <td style="padding:8px 12px">组件通信</td>
+      <td style="padding:8px 12px">直接方法调用，不引入事件总线</td>
+      <td style="padding:8px 12px;color:#a6adc8">简单透明，调用链可追踪</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333">
+      <td style="padding:8px 12px">状态持久化</td>
+      <td style="padding:8px 12px">可选，State.to_dict() / from_dict()</td>
+      <td style="padding:8px 12px;color:#a6adc8">库不关心存储，由外部决定</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333">
+      <td style="padding:8px 12px">LLM 调用</td>
+      <td style="padding:8px 12px">async 优先，同步为 thin wrapper</td>
+      <td style="padding:8px 12px;color:#a6adc8">不阻塞，支持并发工具调用</td>
+    </tr>
+    <tr style="border-bottom:1px solid #333">
+      <td style="padding:8px 12px">工具执行</td>
+      <td style="padding:8px 12px">async 主路径，同步工具自动包装</td>
+      <td style="padding:8px 12px;color:#a6adc8">兼容两种工具定义</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 12px">配置</td>
+      <td style="padding:8px 12px">pydantic-settings + .env 文件</td>
+      <td style="padding:8px 12px;color:#a6adc8">类型安全 + 环境变量覆盖</td>
+    </tr>
+  </table>
+</div>

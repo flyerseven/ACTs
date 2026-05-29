@@ -15,7 +15,7 @@ class LLMConfig:
     name: str
     temperature: float = 0.7
     max_tokens: int = 4096
-    base_url: str = "https://api.openai.com/v1"
+    base_url: str = "https://api.deepseek.com"
     api_key_ref: str = ""
     timeout_seconds: int = 120
 
@@ -28,6 +28,7 @@ class AgentConfig:
     system_prompt: str = ""
     model: LLMConfig = field(default_factory=lambda: LLMConfig(provider="mock", name="mock"))
     skills: list[str] = field(default_factory=list)
+    enable_decision_core: bool = False
     created_at: str = field(default_factory=utc_now_iso)
     updated_at: str = field(default_factory=utc_now_iso)
 
@@ -66,7 +67,7 @@ def llm_config_from_dict(data: dict[str, Any]) -> LLMConfig:
         name=data.get("name", "mock"),
         temperature=float(data.get("temperature", 0.7)),
         max_tokens=int(data.get("max_tokens", 4096)),
-        base_url=data.get("base_url", "https://api.openai.com/v1"),
+        base_url=data.get("base_url", "https://api.deepseek.com"),
         api_key_ref=data.get("api_key_ref", ""),
         timeout_seconds=int(data.get("timeout_seconds", 120)),
     )
@@ -93,6 +94,7 @@ def agent_config_from_dict(data: dict[str, Any]) -> AgentConfig:
         system_prompt=str(data.get("system_prompt", "")),
         model=model,
         skills=list(data.get("skills", [])),
+        enable_decision_core=bool(data.get("enable_decision_core", False)),
         created_at=str(data.get("created_at", utc_now_iso())),
         updated_at=str(data.get("updated_at", utc_now_iso())),
     )
@@ -106,6 +108,7 @@ def agent_config_to_dict(config: AgentConfig) -> dict[str, Any]:
         "system_prompt": config.system_prompt,
         "model": llm_config_to_dict(config.model),
         "skills": list(config.skills),
+        "enable_decision_core": config.enable_decision_core,
         "created_at": config.created_at,
         "updated_at": config.updated_at,
     }

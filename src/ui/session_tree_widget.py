@@ -105,7 +105,8 @@ class SessionTreeWidget(QTreeWidget):
 
             group_item = QTreeWidgetItem()
             font = group_item.font(0)
-            font.setPointSize(font.pointSize() - 1)
+            if font.pointSize() > 0:
+                font.setPointSize(font.pointSize() - 1)
             font.setBold(True)
             group_item.setFont(0, font)
 
@@ -124,7 +125,8 @@ class SessionTreeWidget(QTreeWidget):
                 session_item.setData(0, Qt.ItemDataRole.UserRole, session_id)
 
                 sf = session_item.font(0)
-                sf.setPointSize(sf.pointSize() - 1)
+                if sf.pointSize() > 0:
+                    sf.setPointSize(sf.pointSize() - 1)
                 session_item.setFont(0, sf)
 
             self.addTopLevelItem(group_item)

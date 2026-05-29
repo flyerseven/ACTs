@@ -36,9 +36,11 @@ CLAUDE.md.local
 Thumbs.db
 
 #tools
-claude.bat
-codegraph.bat
+.bat
 
 #others
 procession/
 ACTs_UI_Design.html
+logs/
+llm_doc/
+skills/

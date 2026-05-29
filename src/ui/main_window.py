@@ -17,6 +17,7 @@ from PyQt6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSpinBox,
@@ -30,6 +31,7 @@ from PyQt6.QtWidgets import (
 from ui.agent_panel import AgentPanel
 from ui.session_panel import SessionPanel
 from ui.session_tree_widget import SessionTreeWidget
+from ui.skill_manager import SkillManager
 from core.models import agent_config_from_dict, session_meta_from_dict
 from storage.file_store import FileStore
 from security.vault import Vault
@@ -55,6 +57,7 @@ class MainWindow(QMainWindow):
         wrapper_layout.setSpacing(0)
 
         wrapper_layout.addWidget(self._build_title_bar(version))
+        wrapper_layout.addWidget(self._build_menu_bar())
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
         splitter.setChildrenCollapsible(False)
@@ -118,6 +121,56 @@ class MainWindow(QMainWindow):
         layout.addStretch(1)
 
         return bar
+
+    # ── Menu bar ─────────────────────────────────────────────────────────
+
+    def _build_menu_bar(self) -> QWidget:
+        bar = QFrame()
+        bar.setFixedHeight(28)
+        bar.setStyleSheet(
+            "QFrame { background-color: #1e1e1e; border-bottom: 1px solid #3c3c3c; }"
+        )
+        layout = QHBoxLayout(bar)
+        layout.setContentsMargins(8, 0, 8, 0)
+        layout.setSpacing(0)
+
+        layout.addWidget(self._menu_button("Skill", [
+            ("Manage Skills", self._open_skill_manager),
+        ]))
+
+        layout.addStretch(1)
+        return bar
+
+    def _menu_button(self, title: str, items: list[tuple[str, object]]) -> QPushButton:
+        btn = QPushButton(title)
+        btn.setFlat(True)
+        btn.setFixedHeight(26)
+        btn.setStyleSheet(
+            "QPushButton { color: #cccccc; font-size: 11.5px; padding: 2px 10px;"
+            "  background: transparent; border: none; border-radius: 4px; }"
+            "QPushButton:hover { background-color: #3c3c3c; }"
+            "QPushButton:pressed { background-color: #007acc; }"
+        )
+
+        menu = QMenu(btn)
+        menu.setStyleSheet(
+            "QMenu { background-color: #2d2d2d; color: #cccccc; border: 1px solid #3c3c3c; }"
+            "QMenu::item { padding: 5px 24px; }"
+            "QMenu::item:selected { background-color: #007acc; }"
+            "QMenu::separator { height: 1px; background: #3c3c3c; margin: 4px 8px; }"
+        )
+
+        for label, handler in items:
+            action = menu.addAction(label)
+            if callable(handler):
+                action.triggered.connect(handler)
+
+        btn.setMenu(menu)
+        return btn
+
+    def _open_skill_manager(self) -> None:
+        dlg = SkillManager(self)
+        dlg.exec()
 
     # ── WebEngine pre-warm ──────────────────────────────────────────────
 

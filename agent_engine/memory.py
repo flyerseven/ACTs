@@ -26,12 +26,13 @@ class MemoryManager:
 
     # -- Message management --
 
-    def add(self, role: str, content: str, **meta: str | None) -> None:
+    def add(self, role: str, content: str, **meta: object) -> None:
         self._messages.append(Message(
             role=role,  # type: ignore[arg-type]
             content=content,
-            tool_call_id=meta.get("tool_call_id"),
-            name=meta.get("name"),
+            tool_call_id=meta.get("tool_call_id"),  # type: ignore[arg-type]
+            name=meta.get("name"),  # type: ignore[arg-type]
+            tool_calls=meta.get("tool_calls"),  # type: ignore[arg-type]
         ))
 
     def set_system_prompt(self, prompt: str) -> None:
@@ -59,14 +60,24 @@ class MemoryManager:
         non_system = [m for m in self._messages if m.role != "system"]
         recent: list[dict] = []
         for m in reversed(non_system):
-            msg_dict: dict = {"role": m.role, "content": m.content}
+            msg_dict: dict = {"role": m.role}
+            if m.tool_calls:
+                # DeepSeek rejects "content": null — omit the key entirely
+                # when tool_calls is present.
+                if m.content:
+                    msg_dict["content"] = m.content
+            else:
+                msg_dict["content"] = m.content
             if m.tool_call_id:
                 msg_dict["tool_call_id"] = m.tool_call_id
-            if m.name:
+            if m.name and m.role != "tool":
+                # DeepSeek rejects "name" on tool-role messages.
                 msg_dict["name"] = m.name
-            if chars_used + len(m.content) <= max_chars:
+            if m.tool_calls:
+                msg_dict["tool_calls"] = m.tool_calls
+            if chars_used + len(m.content or "") <= max_chars:
                 recent.append(msg_dict)
-                chars_used += len(m.content)
+                chars_used += len(m.content or "")
             else:
                 break
 

@@ -1,0 +1,12 @@
+# Agent Configuration
+agent:
+  name: test-agent
+  model: deepseek-chat
+  temperature: 0.7
+  max_tokens: 4096
+  skills:
+    - file-query
+
+workspace:
+  root: ./workspace
+  readonly: true

@@ -72,7 +72,8 @@ def main() -> int:
         _print_token_stats(token_tracker, session_id=args.tokens_session)
         return 0
 
-    setup_logging()
+    log_path = setup_logging()
+    print(f"Logging to: {log_path}")
     store = FileStore()
     store.ensure_structure()
 

@@ -35,7 +35,8 @@ class ToolRegistry:
 
     def register(self, tool: ToolDef) -> None:
         if tool.name in self._tools:
-            raise ValueError(f"Tool '{tool.name}' already registered")
+            logger.debug(f"Tool '{tool.name}' already registered, skipping")
+            return
         self._tools[tool.name] = tool
         logger.debug(f"Registered tool: {tool.name}")
 
@@ -46,11 +47,16 @@ class ToolRegistry:
             schema["description"] = description
         is_async = inspect.iscoroutinefunction(func)
 
+        params: dict = {"type": "object", "properties": schema.get("properties", {}),
+                        "additionalProperties": False}
+        required = schema.get("required", [])
+        if required:
+            params["required"] = required
+
         self.register(ToolDef(
             name=tool_name,
             description=schema.get("description", ""),
-            parameters={"type": "object", "properties": schema.get("properties", {}),
-                        "required": schema.get("required", [])},
+            parameters=params,
             func=func,
             is_async=is_async,
             **overrides,
@@ -60,10 +66,13 @@ class ToolRegistry:
         func_def = schema if "name" in schema else schema.get("function", schema)
         name = func_def["name"]
         is_async = inspect.iscoroutinefunction(func)
+        params = func_def.get("parameters", {"type": "object", "properties": {}})
+        if isinstance(params, dict) and params.get("type") == "object":
+            params.setdefault("additionalProperties", False)
         self.register(ToolDef(
             name=name,
             description=func_def.get("description", ""),
-            parameters=func_def.get("parameters", {"type": "object", "properties": {}}),
+            parameters=params,
             func=func,
             is_async=is_async,
         ))
@@ -150,6 +159,15 @@ class ToolRegistry:
             str: "string", int: "integer", float: "number",
             bool: "boolean", list: "array", dict: "object",
         }
+        # String annotations (from ``from __future__ import annotations``)
+        _str_type_map = {
+            "str": "string", "string": "string",
+            "int": "integer", "integer": "integer",
+            "float": "number", "number": "number",
+            "bool": "boolean", "boolean": "boolean",
+            "list": "array", "array": "array",
+            "dict": "object", "object": "object",
+        }
 
         properties: dict[str, dict] = {}
         required: list[str] = []
@@ -159,7 +177,10 @@ class ToolRegistry:
                 continue
             param_type = "string"
             if param.annotation is not inspect.Parameter.empty:
-                param_type = type_map.get(param.annotation, "string")
+                if isinstance(param.annotation, str):
+                    param_type = _str_type_map.get(param.annotation.lower().strip(), "string")
+                else:
+                    param_type = type_map.get(param.annotation, "string")
             properties[param_name] = {
                 "type": param_type,
                 "description": param_descriptions.get(param_name, ""),

@@ -1,0 +1,106 @@
+<h2>模块详细设计 — 安全 & LLM & 配置</h2>
+
+<div class="section">
+  <h3>8. safety.py — 安全检查</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">SafetyChecker</span>:
+    <span style="color:#a6adc8">"""安全检查 — 内置默认策略 + 可注册自定义钩子"""</span>
+
+    max_steps: int = 50
+    tool_whitelist: set[str] | None = None  <span style="color:#a6adc8"># None = 全部允许</span>
+    confirm_sensitive: set[str] = {<span style="color:#a6e3a1">"exec"</span>, <span style="color:#a6e3a1">"shell"</span>, <span style="color:#a6e3a1">"file_delete"</span>}
+    stop_requested: bool = False
+
+    <span style="color:#a6adc8"># -- 核心检查 --</span>
+    should_stop(state: AgentState) → bool
+        <span style="color:#a6adc8"># 1. max_steps 超限? → emit("hit_max_steps")</span>
+        <span style="color:#a6adc8"># 2. stop_requested? → emit("user_interrupt")</span>
+        <span style="color:#a6adc8"># 3. 同错误连续5次? → emit("error_loop")</span>
+
+    check_tool(tool_name: str, arguments: dict) → bool
+        <span style="color:#a6adc8"># 1. 白名单过滤</span>
+        <span style="color:#a6adc8"># 2. 敏感操作标记 → 外部可决定是否确认</span>
+
+    request_stop() → None  <span style="color:#a6adc8"># 紧急停止</span>
+
+    <span style="color:#a6adc8"># -- 钩子系统 --</span>
+    before_action(callback) → None
+    after_action(callback) → None
+    _run_hooks(hook_name: str, context: dict) → bool  <span style="color:#a6adc8"># False = 阻止</span>
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>9. llm.py — LLM 适配器</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">LLMResponse</span>(BaseModel):
+    content: str
+    tool_calls: list[ToolCallRequest] = []
+    usage: dict = {}
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">LLMAdapter</span>(ABC):
+    <span style="color:#a6adc8">"""抽象接口 — 用户可实现此接口接入任何 LLM"""</span>
+    <span style="color:#89b4fa">async</span> chat(messages: list[dict], tools: list[dict] | None) → LLMResponse
+    <span style="color:#89b4fa">async</span> chat_stream(messages, tools) → AsyncGenerator[str]
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">OpenAIAdapter</span>(LLMAdapter):
+    <span style="color:#a6adc8">"""内置的 OpenAI 兼容适配器 — httpx + SSE streaming"""</span>
+    base_url: str = <span style="color:#a6e3a1">"https://api.openai.com/v1"</span>
+    api_key: str
+    model: str = <span style="color:#a6e3a1">"gpt-4o"</span>
+    max_retries: int = 3
+    timeout: float = 60.0
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">CallbackAdapter</span>(LLMAdapter):
+    <span style="color:#a6adc8">"""自定义 chat 回调 — 用户只需传入 async 函数"""</span>
+    _chat_fn: Callable  <span style="color:#a6adc8"># async def fn(messages, tools) -> str</span>
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>10. 项目结构最终确认</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.8">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+agent_engine/                    <span style="color:#a6adc8">← 独立 Python 包</span>
+├── __init__.py                  <span style="color:#a6adc8">← 导出 AgentEngine, 所有核心类</span>
+├── pyproject.toml               <span style="color:#a6adc8">← 包依赖: pydantic, loguru, python-dotenv, httpx</span>
+├── README.md                    <span style="color:#a6adc8">← 安装、使用、扩展示例</span>
+│
+├── engine.py                    <span style="color:#a6adc8">← AgentEngine.run() 主循环</span>
+├── state.py                     <span style="color:#a6adc8">← StateManager 状态机</span>
+├── tools.py                     <span style="color:#a6adc8">← ToolRegistry 工具注册/调用</span>
+├── memory.py                    <span style="color:#a6adc8">← MemoryManager 消息+摘要</span>
+├── reflect.py                   <span style="color:#a6adc8">← Reflector 反思修正</span>
+├── observe.py                   <span style="color:#a6adc8">← Observer 日志/回调/Mermaid/指标</span>
+├── safety.py                    <span style="color:#a6adc8">← SafetyChecker 安全检查+钩子</span>
+├── llm.py                       <span style="color:#a6adc8">← LLMAdapter + OpenAIAdapter + CallbackAdapter</span>
+├── types.py                     <span style="color:#a6adc8">← 所有 Pydantic 数据模型</span>
+├── config.py                    <span style="color:#a6adc8">← pydantic-settings 全局配置</span>
+│
+├── builtin_tools/
+│   ├── __init__.py
+│   ├── search.py                <span style="color:#a6adc8">← 网络搜索（requests + DuckDuckGo）</span>
+│   ├── calculator.py            <span style="color:#a6adc8">← 安全计算器（ast.parse 白名单）</span>
+│   ├── files.py                 <span style="color:#a6adc8">← 文件读写（路径沙箱限制）</span>
+│   └── code_exec.py             <span style="color:#a6adc8">← 代码执行（subprocess 隔离）</span>
+│
+├── cli.py                       <span style="color:#a6adc8">← 命令行界面</span>
+└── tests/
+    ├── test_engine.py
+    ├── test_tools.py
+    ├── test_memory.py
+    ├── test_reflect.py
+    └── test_safety.py
+</pre>
+    </div>
+  </div>
+</div>

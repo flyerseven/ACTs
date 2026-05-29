@@ -156,6 +156,19 @@ class EngineWorker(QThread):
         engine = agent.create_engine(api_key)
         engine.config.debug = True  # enable stderr debug output for console visibility
 
+        # Load session conversation history into engine memory so the
+        # agent has full context.  engine.run() sets its own system
+        # prompt and adds the current user goal, so skip both here.
+        msgs = self.session.messages
+        load_count = len(msgs)
+        if load_count > 0 and msgs[-1].role == "user":
+            load_count -= 1  # engine.run() will add the current goal
+        for i in range(load_count):
+            msg = msgs[i]
+            if msg.role == "system":
+                continue
+            engine.memory.add(msg.role, msg.content)
+
         self.engine_started.emit(self.content)
 
         # ── Build enhanced system prompt with skill extensions ──
@@ -626,6 +639,22 @@ class SessionPanel(QWidget):
         self._stream_text = ""
         self._stream_bubble = self.chat_view.add_message(
             "assistant", "", render_latex=False)
+
+        # Disconnect previous worker signals so handlers never fire twice.
+        if self._worker is not None:
+            try:
+                self._worker.engine_started.disconnect()
+                self._worker.thought_chunk.disconnect()
+                self._worker.thought_done.disconnect()
+                self._worker.tool_call_signal.disconnect()
+                self._worker.tool_result_signal.disconnect()
+                self._worker.reflection_signal.disconnect()
+                self._worker.step_end_signal.disconnect()
+                self._worker.engine_finished.disconnect()
+                self._worker.finished_reply.disconnect()
+                self._worker.engine_failed_signal.disconnect()
+            except TypeError:
+                pass  # already disconnected
 
         print("\n" + "=" * 50, flush=True)
         print("  Decision Engine Started", flush=True)

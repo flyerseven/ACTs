@@ -1,0 +1,130 @@
+<h2>模块详细设计 — 工具系统 & 记忆系统</h2>
+
+<div class="section">
+  <h3>3. tools.py — 工具注册与调用</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;overflow-x:auto">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">ToolRegistry</span>:
+    <span style="color:#a6adc8">"""工具注册中心 — 支持动态增删、参数验证、超时重试"""</span>
+
+    <span style="color:#a6adc8"># -- 注册 --</span>
+    register(tool: ToolDef) → None
+    register_from_func(func: Callable, **meta) → None  <span style="color:#a6adc8"># 自动从签名+docstring推断</span>
+    register_from_openai(schema: dict, func: Callable) → None
+    unregister(name: str) → None
+    list_tools() → list[ToolDef]
+    list_openai_schemas() → list[dict]  <span style="color:#a6adc8"># 生成 OpenAI function calling 格式</span>
+
+    <span style="color:#a6adc8"># -- 调用 --</span>
+    <span style="color:#89b4fa">async</span> call(name: str, arguments: dict) → ToolCall
+        <span style="color:#a6adc8"># 1. 查找工具 → 2. 验证参数 → 3. 超时包装 → 4. 执行 → 5. 重试(需配置)</span>
+
+    <span style="color:#a6adc8"># -- 参数推断 --</span>
+    _infer_schema_from_func(func: Callable) → dict
+        <span style="color:#a6adc8"># 类型注解 → JSON Schema: str→string, int→integer, float→number</span>
+        <span style="color:#a6adc8"># docstring 首行 → description, :param xxx: → 参数描述</span>
+
+<span style="color:#a6adc8"># 使用示例:</span>
+registry = ToolRegistry()
+registry.register_from_func(
+    <span style="color:#f9e2af">lambda</span> query: search_web(query),
+    name=<span style="color:#a6e3a1">"web_search"</span>,
+    description=<span style="color:#a6e3a1">"搜索互联网获取最新信息"</span>
+)
+result: ToolCall = <span style="color:#f9e2af">await</span> registry.call(<span style="color:#a6e3a1">"web_search"</span>, {<span style="color:#a6e3a1">"query"</span>: <span style="color:#a6e3a1">"Python 3.12"</span>})
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>工具调用流程</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+  LLM 输出 tool_call
+       │
+       ▼
+  ┌─────────────┐
+  │ 1. 白名单检查 │ → 不在白名单？ → 拒绝 + 记录
+  └─────┬───────┘
+        ▼
+  ┌─────────────┐
+  │ 2. 参数校验   │ → pydantic 验证 + 必填检查
+  └─────┬───────┘
+        ▼
+  ┌─────────────┐
+  │ 3. 超时包装   │ → asyncio.wait_for(tool_call, timeout)
+  └─────┬───────┘
+        ▼
+  ┌─────────────┐      失败 & retry_count &lt; max_retries
+  │ 4. 执行工具   │ ──────────────────────────────────┐
+  └─────┬───────┘                                     │
+        │ 成功                                         │
+        ▼                                             │
+  ┌─────────────┐                                     │
+  │ 5. 记录结果   │ ◄───────────────────────────────────┘
+  └─────────────┘
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>4. memory.py — 记忆管理器</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">MemoryManager</span>:
+    <span style="color:#a6adc8">"""管理会话内的消息列表 + 自动摘要压缩"""</span>
+
+    <span style="color:#a6adc8"># -- 消息管理 --</span>
+    add(role, content, **meta) → None
+    get_messages() → list[Message]  <span style="color:#a6adc8"># 所有消息</span>
+    get_context_messages(max_tokens: int) → list[dict]
+        <span style="color:#a6adc8"># 智能截取：system prompt 一定保留，recent messages 优先</span>
+
+    <span style="color:#a6adc8"># -- 摘要压缩 --</span>
+    <span style="color:#89b4fa">async</span> compress(llm_adapter, trigger_tokens: int = 4000)
+        <span style="color:#a6adc8"># 当消息估算 token 超过阈值时触发</span>
+        <span style="color:#a6adc8"># 1. 取最早 50% 的消息</span>
+        <span style="color:#a6adc8"># 2. 让 LLM 生成摘要</span>
+        <span style="color:#a6adc8"># 3. 删除旧消息，在 system prompt 后插入摘要</span>
+
+    <span style="color:#a6adc8"># -- Token 估算 --</span>
+    estimate_tokens() → int  <span style="color:#a6adc8"># 简单估算: char_count / 4</span>
+
+    <span style="color:#a6adc8"># -- 快照 --</span>
+    to_dict() → dict
+    from_dict(data: dict) → MemoryManager
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>摘要压缩触发时机</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="padding:16px">
+      <table style="width:100%;border-collapse:collapse;font-size:14px">
+        <tr style="background:#2a2a3a">
+          <th style="padding:8px 12px;text-align:left">条件</th>
+          <th style="padding:8px 12px;text-align:left">动作</th>
+        </tr>
+        <tr style="border-bottom:1px solid #333">
+          <td style="padding:8px 12px">estimate_tokens() > 6000</td>
+          <td style="padding:8px 12px">自动压缩到 ~3000 tokens 以内</td>
+        </tr>
+        <tr style="border-bottom:1px solid #333">
+          <td style="padding:8px 12px">每 15 个 assistant 回合</td>
+          <td style="padding:8px 12px">对前 10 轮生成摘要（轻量压缩）</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px">手动调用 compress()</td>
+          <td style="padding:8px 12px">立即压缩，force=True 强制全量摘要</td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>

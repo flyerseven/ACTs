@@ -1,0 +1,120 @@
+<h2>模块详细设计 — 反思 & 观测 & 决策循环</h2>
+
+<div class="section">
+  <h3>5. reflect.py — 反思与自我修正</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Reflector</span>:
+    <span style="color:#a6adc8">"""每 N 步自动反思，检测偏离、循环、重复"""</span>
+
+    reflect_interval: int = 3  <span style="color:#a6adc8"># 每3步反思一次</span>
+
+    <span style="color:#89b4fa">async</span> reflect(state: AgentState, memory: MemoryManager, llm) → Reflection
+
+    <span style="color:#a6adc8"># -- 检测方法（不依赖 LLM，纯规则）--</span>
+    detect_repetition(steps: list[Step]) → bool
+        <span style="color:#a6adc8"># 连续3步调用相同工具+相同参数 → 判定循环</span>
+    detect_off_track(goal, steps) → float
+        <span style="color:#a6adc8"># 简单关键词匹配，评估与目标的偏离度 0~1</span>
+    summarize_errors(errors: list[str]) → str
+        <span style="color:#a6adc8"># 去重 + 类型归纳</span>
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Reflection</span>(BaseModel):
+    <span style="color:#a6adc8">"""反思结果"""</span>
+    should_continue: bool
+    strategy_adjustment: str = ""  <span style="color:#a6adc8"># LLM 给出的策略调整建议</span>
+    is_stuck: bool = False
+    detected_loop: bool = False
+    off_track_score: float = 0.0
+    summary: str = ""
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>6. observe.py — 观测系统</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Observer</span>:
+    <span style="color:#a6adc8">"""统一的可观测性层：日志 + 回调 + Mermaid + 指标"""</span>
+
+    <span style="color:#a6adc8"># -- 事件发射 --</span>
+    on_event(callback: Callable[[Event], None]) → None
+    emit(event: Event) → None  <span style="color:#a6adc8"># 触发所有注册的回调</span>
+
+    <span style="color:#a6adc8"># -- Mermaid 生成 --</span>
+    generate_mermaid(state: AgentState) → str
+        <span style="color:#a6adc8"># 输出 flowchart TD，展示每步的决策路径</span>
+
+    <span style="color:#a6adc8"># -- 指标收集 --</span>
+    get_report() → MetricsReport
+        <span style="color:#a6adc8"># 执行时间 / 总步数 / 工具调用次数 / 成功率 / Token 消耗</span>
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Event</span>(BaseModel):
+    type: Literal["step_start","step_end","tool_call","tool_result",
+                  "reflection","error","paused","stopped","done"]
+    timestamp: datetime
+    data: dict = {}
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>7. engine.py — 决策循环（核心）</h3>
+  <div class="mockup">
+    <div class="mockup-header">DecisionLoop.run() 主流程</div>
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">AgentEngine</span>:
+    <span style="color:#a6adc8">"""一切组件的组装点 — 用户只跟这个类交互"""</span>
+
+    state: StateManager
+    tools: ToolRegistry
+    memory: MemoryManager
+    reflector: Reflector
+    observer: Observer
+    safety: SafetyChecker
+    llm: LLMAdapter
+
+    <span style="color:#89b4fa">async</span> run(goal: str, **kwargs) → AgentState:
+        state.start(goal)
+        observer.emit(Event(type=<span style="color:#a6e3a1">"start"</span>))
+
+        <span style="color:#f9e2af">while</span> state.status == <span style="color:#a6e3a1">"running"</span>:
+            <span style="color:#cba6f7">if</span> safety.should_stop(state): <span style="color:#f9e2af">break</span>
+
+            <span style="color:#a6adc8"># 1. OBSERVE — 收集上下文</span>
+            context = memory.get_context_messages()
+            step = Step(index=state.current_step_index, phase=<span style="color:#a6e3a1">"observe"</span>)
+
+            <span style="color:#a6adc8"># 2. THINK — LLM 推理下一步行动</span>
+            step.phase = <span style="color:#a6e3a1">"think"</span>
+            response = <span style="color:#f9e2af">await</span> llm.chat(context, tools.list_openai_schemas())
+            step.thought = response.content
+
+            <span style="color:#a6adc8"># 3. ACT — 执行工具调用（如果有）</span>
+            <span style="color:#cba6f7">if</span> response.tool_calls:
+                <span style="color:#f9e2af">for</span> tc <span style="color:#f9e2af">in</span> response.tool_calls:
+                    <span style="color:#cba6f7">if</span> <span style="color:#f9e2af">not</span> safety.check_tool(tc.name): <span style="color:#f9e2af">continue</span>
+                    step.phase = <span style="color:#a6e3a1">"act"</span>
+                    step.tool_call = <span style="color:#f9e2af">await</span> tools.call(tc.name, tc.arguments)
+                    memory.add(<span style="color:#a6e3a1">"tool"</span>, str(step.tool_call.result), name=tc.name)
+
+            <span style="color:#a6adc8"># 4. REFLECT — 每 N 步反思</span>
+            <span style="color:#cba6f7">if</span> state.current_step_index % reflector.reflect_interval == 0:
+                step.phase = <span style="color:#a6e3a1">"reflect"</span>
+                reflection = <span style="color:#f9e2af">await</span> reflector.reflect(state, memory, llm)
+                <span style="color:#cba6f7">if</span> reflection.is_stuck: state.stop(<span style="color:#a6e3a1">"检测到死循环"</span>)
+
+            state.add_step(step)
+            observer.emit(Event(type=<span style="color:#a6e3a1">"step_end"</span>, data=step))
+
+        <span style="color:#f9e2af">return</span> state
+</pre>
+    </div>
+  </div>
+</div>

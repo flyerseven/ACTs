@@ -1,0 +1,120 @@
+<h2>模块详细设计 — 类型系统 & 状态管理</h2>
+<p class="subtitle">Pydantic 模型定义所有核心数据结构</p>
+
+<div class="section">
+  <h3>1. types.py — 共享类型定义</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;overflow-x:auto">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">ToolDef</span>(BaseModel):
+    <span style="color:#a6adc8">"""工具定义 — 同时支持 OpenAI 格式和 Python 函数"""</span>
+    name: str
+    description: str
+    parameters: dict  <span style="color:#a6adc8"># JSON Schema</span>
+    func: Callable | None = None  <span style="color:#a6adc8"># Python 函数引用（可选）</span>
+    is_async: bool = False
+    timeout_sec: float = 30.0
+    max_retries: int = 2
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">ToolCall</span>(BaseModel):
+    <span style="color:#a6adc8">"""工具调用记录"""</span>
+    id: str
+    tool_name: str
+    arguments: dict
+    result: Any = None
+    error: str | None = None
+    started_at: datetime
+    finished_at: datetime | None = None
+    duration_ms: float = 0.0
+    retry_count: int = 0
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Step</span>(BaseModel):
+    <span style="color:#a6adc8">"""决策循环中的单步"""</span>
+    index: int
+    phase: Literal["observe", "think", "act", "reflect"]
+    thought: str = ""  <span style="color:#a6adc8"># LLM 的推理输出</span>
+    tool_call: ToolCall | None = None
+    observation: str = ""  <span style="color:#a6adc8"># 环境反馈</span>
+    reflection: str = ""
+    is_completed: bool = False
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">AgentState</span>(BaseModel):
+    <span style="color:#a6adc8">"""Agent 的全局运行状态"""</span>
+    goal: str
+    sub_goals: list[str] = []
+    steps: list[Step] = []
+    current_step_index: int = 0
+    status: Literal["idle","running","paused","done","failed","stopped"] = "idle"
+    errors: list[str] = []
+    metrics: dict = {}  <span style="color:#a6adc8"># steps, tokens, tool_calls, elapsed</span>
+    started_at: datetime | None = None
+
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">Message</span>(BaseModel):
+    <span style="color:#a6adc8">"""对话消息"""</span>
+    role: Literal["system", "user", "assistant", "tool"]
+    content: str
+    tool_call_id: str | None = None
+    name: str | None = None  <span style="color:#a6adc8"># tool name for tool role</span>
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>2. state.py — 状态管理器</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="font-family:monospace;font-size:12px;line-height:1.6">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px">
+<span style="color:#cba6f7">class</span> <span style="color:#89b4fa">StateManager</span>:
+    <span style="color:#a6adc8">"""管理 Agent 运行时的全部状态，纯数据操作，无副作用"""</span>
+
+    <span style="color:#a6adc8"># -- 生命周期 --</span>
+    start(goal: str) → None
+    pause() → None
+    resume() → None
+    stop(reason: str) → None
+
+    <span style="color:#a6adc8"># -- 步骤跟踪 --</span>
+    add_step(step: Step) → None
+    update_current_step(**kwargs) → None
+    get_last_n_steps(n: int) → list[Step]
+
+    <span style="color:#a6adc8"># -- 子目标 --</span>
+    set_sub_goals(goals: list[str]) → None
+    complete_sub_goal(index: int) → None
+
+    <span style="color:#a6adc8"># -- 错误 --</span>
+    record_error(error: str) → None
+    get_error_summary() → str  <span style="color:#a6adc8"># 去重 + 归纳</span>
+
+    <span style="color:#a6adc8"># -- 指标 --</span>
+    update_metrics(**kwargs) → None
+    get_metrics() → dict
+
+    <span style="color:#a6adc8"># -- 状态快照 --</span>
+    to_dict() → dict
+    from_dict(data: dict) → StateManager
+</pre>
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <h3>状态机</h3>
+  <div class="mockup">
+    <div class="mockup-body" style="text-align:center;padding:24px 0">
+<pre style="background:#1e1e2e;color:#cdd6f4;padding:16px;border-radius:8px;display:inline-block;text-align:left">
+     start()          step完成
+  IDLE ────▶ RUNNING ◄──────┐
+   ▲           │  │          │
+   │   pause()│  │stop()     │
+   │          ▼  ▼          │
+   │       PAUSED  FAILED ──┘
+   │          │
+   │ resume() │
+   │          ▼
+   └────── RUNNING
+</pre>
+    </div>
+  </div>
+</div>

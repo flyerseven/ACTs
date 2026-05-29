@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
+    QDialog,
     QFormLayout,
     QHBoxLayout,
     QLabel,
@@ -24,6 +26,7 @@ from core.models import AgentConfig, LLMConfig, agent_config_from_dict, agent_co
 from storage.file_store import FileStore
 from storage.yaml_io import read_yaml, write_yaml
 from security.vault import Vault
+from ui.skill_manager import SkillSelector
 
 
 class AgentPanel(QWidget):
@@ -36,6 +39,7 @@ class AgentPanel(QWidget):
         self.vault = vault
         self.current_agent_id: str | None = None
         self.list_widget: QListWidget | None = None
+        self._selected_skills: list[str] = []
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -86,17 +90,15 @@ class AgentPanel(QWidget):
         detail_layout.addLayout(self._section_divider())
 
         self.provider_combo = QComboBox()
+        self.provider_combo.addItem("DeepSeek", "deepseek")
         self.provider_combo.addItem("Mock", "mock")
-        self.provider_combo.addItem("OpenAI", "openai")
-        self.provider_combo.addItem("OpenAI Compatible", "openai_compat")
-        self.provider_combo.addItem("Custom", "custom")
         self.model_combo = QComboBox()
         self.model_combo.setEditable(True)
-        self.model_combo.addItems(["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo", "mock"])
+        self.model_combo.addItems(["deepseek-v4-pro", "deepseek-v4-flash", "deepseek-chat", "deepseek-reasoner"])
         self.api_key_input = QLineEdit()
-        self.api_key_input.setPlaceholderText("vault:openai or a raw key")
+        self.api_key_input.setPlaceholderText("vault:deepseek or a raw key")
         self.base_url_input = QLineEdit()
-        self.base_url_input.setPlaceholderText("https://api.openai.com/v1")
+        self.base_url_input.setPlaceholderText("https://api.deepseek.com")
 
         model_form = QFormLayout()
         model_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -122,8 +124,24 @@ class AgentPanel(QWidget):
         self.timeout_input = QSpinBox()
         self.timeout_input.setRange(1, 600)
         self.timeout_input.setValue(30)
-        self.skills_input = QLineEdit()
-        self.skills_input.setPlaceholderText("coding, review, summarization")
+
+        # Skills selector
+        skills_row = QHBoxLayout()
+        skills_row.setSpacing(8)
+        self.skills_button = QPushButton("Select Skills…")
+        self.skills_button.setProperty("cssClass", "")
+        self.skills_button.setFixedWidth(130)
+        self.skills_button.clicked.connect(self._open_skill_selector)
+        self.skills_label = QLabel("None")
+        self.skills_label.setStyleSheet("color: #858585; font-size: 11.5px;")
+        skills_row.addWidget(self.skills_button)
+        skills_row.addWidget(self.skills_label, stretch=1)
+
+        self.decision_core_checkbox = QCheckBox(
+            "Enable Decision Core (OBSERVE→THINK→ACT→REFLECT loop)")
+        self.decision_core_checkbox.setStyleSheet(
+            "QCheckBox { color: #e0e0e0; font-size: 12px; spacing: 8px; }"
+            "QCheckBox::indicator { width: 16px; height: 16px; }")
 
         params_form = QFormLayout()
         params_form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
@@ -131,7 +149,8 @@ class AgentPanel(QWidget):
         params_form.addRow(self._form_label("Temperature"), self.temperature_input)
         params_form.addRow(self._form_label("Max Tokens"), self.max_tokens_input)
         params_form.addRow(self._form_label("Timeout (s)"), self.timeout_input)
-        params_form.addRow(self._form_label("Skills"), self.skills_input)
+        params_form.addRow(self._form_label("Skills"), skills_row)
+        params_form.addRow(self.decision_core_checkbox)
         detail_layout.addLayout(params_form)
 
         # ── Actions ──
@@ -253,7 +272,9 @@ class AgentPanel(QWidget):
         self.temperature_input.setValue(config.model.temperature)
         self.max_tokens_input.setValue(config.model.max_tokens)
         self.timeout_input.setValue(config.model.timeout_seconds)
-        self.skills_input.setText(", ".join(config.skills))
+        self.decision_core_checkbox.setChecked(config.enable_decision_core)
+        self._selected_skills = list(config.skills)
+        self._update_skills_label()
 
     def read_form(self) -> AgentConfig:
         agent_id = self.current_agent_id or self.store.new_agent_id()
@@ -262,11 +283,11 @@ class AgentPanel(QWidget):
             name=self.model_combo.currentText().strip() or "mock",
             temperature=float(self.temperature_input.value()),
             max_tokens=int(self.max_tokens_input.value()),
-            base_url=self.base_url_input.text().strip() or "https://api.openai.com/v1",
+            base_url=self.base_url_input.text().strip() or "https://api.deepseek.com",
             api_key_ref=self.api_key_input.text().strip(),
             timeout_seconds=int(self.timeout_input.value()),
         )
-        skills = [s.strip() for s in self.skills_input.text().split(",") if s.strip()]
+        skills = list(self._selected_skills)
         return AgentConfig(
             id=agent_id,
             name=self.name_input.text().strip() or f"Agent {agent_id}",
@@ -274,6 +295,7 @@ class AgentPanel(QWidget):
             system_prompt=self.system_prompt_input.toPlainText().strip(),
             model=model,
             skills=skills,
+            enable_decision_core=self.decision_core_checkbox.isChecked(),
             created_at=utc_now_iso(),
             updated_at=utc_now_iso(),
         )
@@ -313,3 +335,15 @@ class AgentPanel(QWidget):
         self.page_title.setText("Agent Configuration")
         self.refresh_agents()
         self.agents_changed.emit()
+
+    def _open_skill_selector(self) -> None:
+        dialog = SkillSelector(selected_skills=self._selected_skills, parent=self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._selected_skills = dialog.selected_skills()
+            self._update_skills_label()
+
+    def _update_skills_label(self) -> None:
+        if self._selected_skills:
+            self.skills_label.setText(", ".join(self._selected_skills))
+        else:
+            self.skills_label.setText("None")
