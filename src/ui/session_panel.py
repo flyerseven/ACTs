@@ -76,6 +76,7 @@ class LoadingDots(QWidget):
 
 class ChatWorker(QThread):
     chunk_received = pyqtSignal(str)
+    thought_chunk = pyqtSignal(str)
     finished_reply = pyqtSignal(str)
     failed = pyqtSignal(str)
 
@@ -98,9 +99,18 @@ class ChatWorker(QThread):
     async def _task(self) -> str:
         agent = await Agent.load(self.agent_id, self.store, self.vault, token_tracker=self.token_tracker)
         reply_parts: list[str] = []
+        thinking_parts: list[str] = []
+
+        def on_thought(text: str) -> None:
+            thinking_parts.append(text)
+            self.thought_chunk.emit(text)
+
         try:
             messages = self.session.build_context_messages(agent.config.system_prompt)
-            async for chunk in agent.chat_stream(messages, session_id=self.session.meta.id):
+            async for chunk in agent.chat_stream(
+                messages, session_id=self.session.meta.id,
+                on_thought=on_thought,
+            ):
                 reply_parts.append(chunk)
                 self.chunk_received.emit(chunk)
         except Exception as exc:
@@ -109,7 +119,8 @@ class ChatWorker(QThread):
             await self.session.save()
             raise
         reply = "".join(reply_parts)
-        await self.session.add_message("assistant", reply)
+        thinking = "".join(thinking_parts)
+        await self.session.add_message("assistant", reply, thinking=thinking if thinking else None)
         self.session.maybe_compress_context()
         await self.session.save()
         return reply
@@ -620,6 +631,7 @@ class SessionPanel(QWidget):
 
         self._worker = ChatWorker(agent_id, content, self.active_session, self.store, self.vault, token_tracker=self.token_tracker)
         self._worker.chunk_received.connect(self._on_chunk)
+        self._worker.thought_chunk.connect(self._on_thought_chunk)
         self._worker.finished_reply.connect(self._on_finished)
         self._worker.failed.connect(self._on_failed)
         self._worker.start()
@@ -740,8 +752,18 @@ class SessionPanel(QWidget):
         if self._stream_bubble:
             self.chat_view.append_to_message(self._stream_bubble, chunk, render_latex=True)
 
+    def _on_thought_chunk(self, chunk: str) -> None:
+        if not self._stream_bubble:
+            return
+        if not self._stream_bubble.thinking_widget.isVisible():
+            self._stream_bubble.start_thinking()
+        self._stream_bubble.append_thinking(chunk)
+
     def _on_finished(self, reply: str) -> None:
         if self._stream_bubble:
+            # Ensure thinking is finalized even if no content chunks arrived
+            if self._stream_bubble.thinking_widget.isVisible():
+                self._stream_bubble.finalize_thinking()
             self.chat_view.flush_stream_to_message(self._stream_bubble)
         self._enable_input()
         self._suppress_reload = True
@@ -751,6 +773,8 @@ class SessionPanel(QWidget):
 
     def _on_failed(self, message: str) -> None:
         if self._stream_bubble:
+            # Hide thinking widget on failure
+            self._stream_bubble.thinking_widget.setVisible(False)
             self.chat_view.update_message(self._stream_bubble, f"[Error] {message}", render_latex=False)
         self._enable_input()
         self._suppress_reload = True
@@ -867,8 +891,26 @@ class SessionPanel(QWidget):
         self._all_messages = list(session.messages)
         total = len(self._all_messages)
         self._display_offset = max(0, total - self.PAGE_SIZE)
-        for msg in self._all_messages[self._display_offset:]:
-            self.chat_view.add_message(msg.role, msg.content, render_latex=True)
+        msgs = self._all_messages[self._display_offset:]
+        i = 0
+        while i < len(msgs):
+            msg = msgs[i]
+            # Handle thinking → assistant pairing (thinking sits before assistant)
+            thinking_text: str | None = None
+            if msg.role == "thinking":
+                thinking_text = msg.content
+                i += 1
+                if i >= len(msgs):
+                    break
+                msg = msgs[i]
+            bubble = self.chat_view.add_message(msg.role, msg.content, render_latex=True)
+            if thinking_text:
+                bubble.thinking_widget._thinking_text = thinking_text
+                bubble.thinking_widget._body.setPlainText(thinking_text)
+                bubble.thinking_widget._title_label.setText("思考过程")
+                bubble.thinking_widget.set_collapsed(True)
+                bubble.thinking_widget.setVisible(True)
+            i += 1
         self.chat_view.setUpdatesEnabled(True)
         # Keep scrolling to bottom at increasing delays — WebEngine renders
         # KaTeX asynchronously so the content height grows over time.
