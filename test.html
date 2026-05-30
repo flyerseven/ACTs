@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>旧书与猫 · 做旧版</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            min-height: 100vh;
+            background:
+                radial-gradient(ellipse at 20% 50%, rgba(200,170,130,0.15) 0%, transparent 60%),
+                radial-gradient(ellipse at 80% 30%, rgba(160,130,100,0.12) 0%, transparent 50%),
+                #cdb89e;
+            font-family: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", "宋体", Georgia, serif;
+            color: #3a2c1d;
+            line-height: 2;
+            padding: 50px 20px;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+
+        /* ===== 纸张主体 ===== */
+        .page {
+            max-width: 700px;
+            width: 100%;
+            min-height: 600px;
+            background:
+                /* 轻微的污渍 */
+                radial-gradient(ellipse 120px 80px at 15% 8%, rgba(180,140,100,0.08) 0%, transparent 100%),
+                radial-gradient(ellipse 90px 120px at 85% 95%, rgba(160,120,80,0.06) 0%, transparent 100%),
+                radial-gradient(ellipse 60px 60px at 60% 45%, rgba(190,160,120,0.04) 0%, transparent 100%),
+                radial-gradient(ellipse 100px 40px at 30% 75%, rgba(140,110,70,0.05) 0%, transparent 100%),
+                linear-gradient(180deg, #f2e6d5 0%, #f7ede0 15%, #efe2cc 100%);
+            padding: 70px 65px;
+            box-shadow:
+                0 4px 30px rgba(60,40,20,0.25),
+                inset 0 0 80px rgba(200,170,130,0.1),
+                /* 书口阴影 */
+                -2px 0 15px rgba(0,0,0,0.03),
+                2px 0 15px rgba(0,0,0,0.03);
+            position: relative;
+            border: 1px solid rgba(160,130,90,0.15);
+            border-radius: 0;
+        }
+
+        /* ===== 毛边效果（上边缘） ===== */
+        .page::before {
+            content: "";
+            position: absolute;
+            top: -3px;
+            left: 0;
+            right: 0;
+            height: 6px;
+            background:
+                repeating-linear-gradient(
+                    90deg,
+                    transparent 0px,
+                    rgba(160,130,90,0.12) 1px,
+                    transparent 2px,
+                    transparent 6px,
+                    rgba(160,130,90,0.08) 7px,
+                    transparent 8px,
+                    transparent 12px,
+                    rgba(160,130,90,0.06) 13px,
+                    transparent 14px,
+                    transparent 18px
+                );
+        }
+
+        /* ===== 虫蛀/霉斑装饰点 ===== */
+        .foxing {
+            position: absolute;
+            pointer-events: none;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            overflow: hidden;
+            z-index: 0;
+        }
+        .foxing span {
+            position: absolute;
+            display: block;
+            border-radius: 50%;
+            background: rgba(160,120,70,0.06);
+        }
+        .foxing span:nth-child(1) { width: 6px; height: 6px; top: 12%; left: 8%; }
+        .foxing span:nth-child(2) { width: 4px; height: 4px; top: 25%; left: 92%; }
+        .foxing span:nth-child(3) { width: 8px; height: 8px; top: 55%; left: 3%; }
+        .foxing span:nth-child(4) { width: 3px; height: 3px; top: 70%; left: 88%; }
+        .foxing span:nth-child(5) { width: 5px; height: 5px; top: 40%; left: 50%; }
+        .foxing span:nth-child(6) { width: 4px; height: 4px; top: 85%; left: 20%; }
+        .foxing span:nth-child(7) { width: 7px; height: 7px; top: 8%; left: 65%; }
+        .foxing span:nth-child(8) { width: 3px; height: 3px; top: 92%; left: 70%; }
+        .foxing span:nth-child(9) { width: 5px; height: 5px; top: 35%; left: 78%; }
+        .foxing span:nth-child(10) { width: 4px; height: 4px; top: 65%; left: 42%; }
+        .foxing span:nth-child(11) { width: 6px; height: 6px; top: 18%; left: 45%; }
+        .foxing span:nth-child(12) { width: 3px; height: 3px; top: 48%; left: 15%; }
+
+        /* ===== 水渍 ===== */
+        .water-stain {
+            position: absolute;
+            pointer-events: none;
+            border-radius: 50%;
+            background: radial-gradient(ellipse, rgba(200,170,140,0.10) 0%, rgba(180,150,120,0.04) 60%, transparent 70%);
+            z-index: 0;
+        }
+        .water-stain:nth-child(13) { width: 110px; height: 95px; top: 30%; right: 12%; transform: rotate(-15deg); }
+        .water-stain:nth-child(14) { width: 70px; height: 60px; bottom: 20%; left: 8%; transform: rotate(25deg); }
+
+        /* ===== 内容区域 ===== */
+        .content {
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ===== 标题区 ===== */
+        .title-section {
+            text-align: center;
+            margin-bottom: 50px;
+            position: relative;
+        }
+
+        .title-section::after {
+            content: "❦";
+            display: block;
+            font-size: 22px;
+            color: #8b7355;
+            margin-top: 30px;
+            opacity: 0.7;
+            letter-spacing: 8px;
+        }
+
+        h1 {
+            font-size: 32px;
+            font-weight: 400;
+            color: #2c1f12;
+            letter-spacing: 14px;
+            margin-bottom: 8px;
+            position: relative;
+            text-shadow: 1px 1px 0 rgba(180,150,120,0.15);
+        }
+
+        .subtitle {
+            font-size: 13px;
+            color: #8b7355;
+            letter-spacing: 6px;
+            font-style: italic;
+        }
+
+        /* ===== 正文 ===== */
+        p {
+            text-indent: 2em;
+            margin-bottom: 0.8em;
+            font-size: 16.5px;
+            text-align: justify;
+            letter-spacing: 0.02em;
+            word-spacing: 0.5px;
+            color: #3a2c1d;
+        }
+
+        p:first-of-type::first-letter {
+            float: left;
+            font-size: 52px;
+            line-height: 0.9;
+            margin: 5px 10px 2px 0;
+            color: #2c1f12;
+            font-weight: 400;
+            text-shadow: 1px 1px 0 rgba(180,150,120,0.12);
+        }
+
+        /* ===== 段落分隔装饰 ===== */
+        .ornament {
+            text-align: center;
+            margin: 32px 0;
+            color: #9c896b;
+            font-size: 16px;
+            letter-spacing: 10px;
+            opacity: 0.5;
+            user-select: none;
+        }
+
+        /* ===== 尾花 ===== */
+        .end-mark {
+            text-align: center;
+            margin-top: 50px;
+            padding-top: 10px;
+            color: #8b7355;
+            font-size: 24px;
+            opacity: 0.5;
+            letter-spacing: 6px;
+        }
+
+        /* ===== 折痕特效 ===== */
+        .crease {
+            position: absolute;
+            pointer-events: none;
+            z-index: 0;
+            opacity: 0.04;
+        }
+        .crease-1 {
+            top: 40%;
+            left: -5px;
+            width: 12px;
+            height: 30%;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.15), transparent);
+            transform: rotate(2deg);
+        }
+        .crease-2 {
+            top: 10%;
+            right: -3px;
+            width: 8px;
+            height: 20%;
+            background: linear-gradient(90deg, transparent, rgba(0,0,0,0.1), transparent);
+            transform: rotate(-1deg);
+        }
+
+        /* ===== 响应式 ===== */
+        /* ============================================================== */
+        /* ===== 分页系统 ===== */
+        /* ============================================================== */
+
+        /* 每个分页容器，默认隐藏 */
+        .page-container {
+            display: none;
+            animation: pageIn 0.5s ease;
+        }
+        .page-container.active {
+            display: block;
+        }
+
+        /* 翻页动画 */
+        @keyframes pageIn {
+            0%   { opacity: 0.3; transform: translateX(18px); }
+            100% { opacity: 1;   transform: translateX(0); }
+        }
+
+        /* ===== 翻页导航栏 ===== */
+        .pagination-nav {
+            max-width: 700px;
+            width: 100%;
+            margin: 30px auto 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 24px;
+            padding: 18px 0;
+            border-top: 1px solid rgba(160,130,90,0.2);
+            position: relative;
+            z-index: 2;
+        }
+
+        .nav-btn {
+            background: rgba(200,175,145,0.25);
+            border: 1px solid rgba(160,130,90,0.25);
+            padding: 8px 22px;
+            font-size: 15px;
+            font-family: inherit;
+            color: #4d3823;
+            cursor: pointer;
+            border-radius: 0;
+            letter-spacing: 2px;
+            transition: all 0.25s ease;
+            user-select: none;
+        }
+        .nav-btn:hover {
+            background: rgba(180,150,115,0.35);
+            border-color: rgba(140,110,75,0.4);
+        }
+        .nav-btn:disabled {
+            opacity: 0.2;
+            cursor: default;
+            background: transparent;
+            border-color: transparent;
+        }
+
+        .page-indicator {
+            font-size: 14px;
+            color: #7a664c;
+            letter-spacing: 1px;
+            font-family: inherit;
+            min-width: 60px;
+            text-align: center;
+        }
+
+        /* 页码小圆点 */
+        .page-dots {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .page-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: rgba(160,130,90,0.2);
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 0;
+        }
+        .page-dot.active {
+            background: #8b7355;
+            width: 22px;
+            border-radius: 4px;
+        }
+        .page-dot:hover:not(.active) {
+            background: rgba(160,130,90,0.4);
+        }
+
+        /* ============================================================== */
+        /* ===== 响应式 ===== */
+        /* ============================================================== */
+
+        @media (max-width: 600px) {
+            .page {
+                padding: 35px 25px;
+            }
+            h1 {
+                font-size: 26px;
+                letter-spacing: 8px;
+            }
+            p {
+                font-size: 15px;
+            }
+            .subtitle {
+                font-size: 11px;
+            }
+        }
+
+        @media (max-width: 400px) {
+            .page {
+                padding: 25px 18px;
+            }
+            p {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ===== 页码 1：书店与老陈 ===== -->
+<div class="page-container active" id="page-1">
+    <div class="page">
+        <div class="foxing">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span>
+        </div>
+        <div class="water-stain"></div>
+        <div class="water-stain"></div>
+        <div class="crease crease-1"></div>
+        <div class="crease crease-2"></div>
+
+        <div class="content">
+            <div class="title-section">
+                <h1>旧书与猫</h1>
+                <div class="subtitle">—— 老街书店记事</div>
+            </div>
+
+            <p>老街转角有家旧书店，开了二十七年了。</p>
+
+            <p>街口的早餐摊换了三代人。隔壁理发店的王师傅去年搬走了，说是房租涨得厉害。老陈这家书店还在，门头的木招牌让日头晒得发了白，"旧时光书店"几个字在风里晃晃悠悠的。老陈懒得换新的。老主顾都认得，换它做什么。</p>
+
+            <p>店里两个大书架顶天立地，塞得满满当当。牛皮纸封面的旧书，书页都发了黄，有的书脊裂了口子，老陈拿透明胶带一粘，接着卖。靠窗一把藤编摇椅，二十七年了，还是他花三十块钱从旧货市场淘来的。竹条磨得油亮油亮的，人一坐上去就吱呀吱呀响。收银台上搁着一个搪瓷茶缸，缸底的茶渍泡得乌黑，怎么也洗不掉。</p>
+
+            <p>生意不忙。有时候一整天进来两三个人，翻翻书就走了。老陈也不急。铺子是自家的，不用交租。他图个自在。早上九点开门，拿抹布把书架上的灰擦擦，泡一壶茉莉花茶，往藤椅上一歪，能看一上午的书。</p>
+
+            <p>茶是浙江一个老主顾每年寄来的。那人年轻时在老陈这儿买过一套《沈从文全集》，后来搬了家，每年清明前后还惦记着寄两斤新茶来。老陈也不说谢，到了年底给人寄两本旧书去。一来一回，十几年的交情了。</p>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 页码 2：雨中的橘猫 ===== -->
+<div class="page-container" id="page-2">
+    <div class="page">
+        <div class="foxing">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span>
+        </div>
+        <div class="water-stain"></div>
+        <div class="water-stain"></div>
+        <div class="crease crease-1"></div>
+        <div class="crease crease-2"></div>
+
+        <div class="content">
+            <div class="ornament">⁝ ⁝ ⁝</div>
+
+            <p>深秋那天下大雨，雨点噼里啪啦砸在卷帘门上。老陈正要关门，低头一看，门口蜷着一只橘猫。瘦得皮包骨，毛叫雨水淋得一绺一绺的，浑身抖得厉害。老陈站在门口看了它一会儿，心里想：这要是赖上我可怎么办。店里没养过猫。</p>
+
+            <p>他还是把门拉开了。叹了口气，弯腰把猫抱起来。那猫轻得跟一把棉花似的，也不挣，乖乖缩在他怀里。老陈翻出一条旧毛巾，给它里里外外擦了一遍。又翻箱倒柜找出一袋过期的奶粉，热水冲了一碗，放到地上。橘猫凑过去，埋头就喝。咕噜咕噜的，喝得嘴边挂了一圈白胡子。</p>
+
+            <p>打那天起，这猫就不走了。</p>
+
+            <div class="ornament">⁝ ⁝ ⁝</div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 页码 3：墨香 ===== -->
+<div class="page-container" id="page-3">
+    <div class="page">
+        <div class="foxing">
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span><span></span>
+            <span></span><span></span>
+        </div>
+        <div class="water-stain"></div>
+        <div class="water-stain"></div>
+        <div class="crease crease-1"></div>
+        <div class="crease crease-2"></div>
+
+        <div class="content">
+            <p>老陈给它取了个名儿叫墨香。老伴在世的时候念叨过，说在一本旧书里看见这两个字，好听，以后养了猫就叫这个。墨香这名字文雅，这猫可一点儿也不文雅。它最爱趴在收银台上晒太阳，四仰八叉地摊成一张橘色的饼。太阳照在它毛茸茸的肚皮上，老陈伸手去摸，它就咕噜咕噜的，半眯着眼，尾巴尖一甩一甩。</p>
+
+            <p>下雨天，墨香就蜷在老陈腿上打盹，尾巴搭在他胳膊上。老陈一手端着热茶，一手翻旧书，偶尔低头看看腿上那团橘色的暖意，嘴角动了动，也没说什么。</p>
+
+            <p>中午老陈给自己下面条。清水煮面，卧一个荷包蛋，搁一勺猪油，撒几粒葱花。墨香蹲在厨房门口，歪着脑袋看。老陈掰一小段火腿肠放在它碗里，它也埋头吃，吃完了还舔舔嘴，舔舔爪子。窗外细雨绵绵，屋里安安静静。暖黄的灯光照着，蒸汽从面碗里袅袅地升起来，墨香跳上窗台，尾巴绕在身前，看着外面的雨，轻轻地打了一个呵欠。</p>
+
+            <div class="end-mark">☙  ❧</div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== 翻页导航 ===== -->
+<div class="pagination-nav">
+    <button class="nav-btn" id="prevPage" onclick="changePage(-1)">◀ 上一页</button>
+
+    <div class="page-dots">
+        <button class="page-dot active" onclick="goToPage(1)"></button>
+        <button class="page-dot" onclick="goToPage(2)"></button>
+        <button class="page-dot" onclick="goToPage(3)"></button>
+    </div>
+
+    <button class="nav-btn" id="nextPage" onclick="changePage(1)">下一页 ▶</button>
+</div>
+
+<script>
+// ===== 翻页控制 =====
+(function() {
+    'use strict';
+
+    var currentPage = 1;
+    var totalPages = 3;
+
+    var containers = [
+        document.getElementById('page-1'),
+        document.getElementById('page-2'),
+        document.getElementById('page-3')
+    ];
+    var dots = document.querySelectorAll('.page-dot');
+    var prevBtn = document.getElementById('prevPage');
+    var nextBtn = document.getElementById('nextPage');
+
+    function updateUI() {
+        // 切换页面
+        for (var i = 0; i < totalPages; i++) {
+            if (containers[i]) {
+                containers[i].classList.toggle('active', i + 1 === currentPage);
+            }
+        }
+        // 切换小圆点
+        for (var i = 0; i < dots.length; i++) {
+            dots[i].classList.toggle('active', i + 1 === currentPage);
+        }
+        // 按钮状态
+        if (prevBtn) prevBtn.disabled = currentPage === 1;
+        if (nextBtn) nextBtn.disabled = currentPage === totalPages;
+    }
+
+    window.goToPage = function(n) {
+        if (n < 1 || n > totalPages || n === currentPage) return;
+        currentPage = n;
+        updateUI();
+    };
+
+    window.changePage = function(delta) {
+        var target = currentPage + delta;
+        if (target < 1 || target > totalPages) return;
+        currentPage = target;
+        updateUI();
+    };
+
+    // ===== 统一所有页面高度（取最高页） =====
+    function equalizePageHeights() {
+        var pages = document.querySelectorAll('.page');
+        var maxH = 0;
+        for (var i = 0; i < pages.length; i++) {
+            pages[i].style.height = 'auto';
+        }
+        for (var i = 0; i < pages.length; i++) {
+            var h = pages[i].offsetHeight;
+            if (h > maxH) maxH = h;
+        }
+        for (var i = 0; i < pages.length; i++) {
+            pages[i].style.height = maxH + 'px';
+        }
+    }
+    // 页面加载完成和窗口大小变化时重新计算
+    window.addEventListener('load', equalizePageHeights);
+    window.addEventListener('resize', equalizePageHeights);
+
+    // 键盘左右键翻页
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'ArrowRight') {
+            window.changePage(1);
+        } else if (e.key === 'ArrowLeft') {
+            window.changePage(-1);
+        }
+    });
+
+    // 初始化状态
+    updateUI();
+})();
+</script>
+
+</body>
+</html>

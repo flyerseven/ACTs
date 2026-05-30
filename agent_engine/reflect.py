@@ -87,7 +87,13 @@ class Reflector:
     def detect_off_track(self, goal: str, steps: list[Step]) -> float:
         """Estimate how off-track the agent is (0.0 = fully on track,
         1.0 = completely off). Uses keyword overlap across thoughts,
-        observations, and tool call details."""
+        observations, and tool call details.
+
+        Short-circuits to 0.0 when recent tool calls form a known
+        productive pattern (e.g. write→read verification, progressive
+        reads with different offsets) — those are false positives for
+        the keyword heuristic.
+        """
         if not steps or not goal:
             return 0.0
 
@@ -96,9 +102,20 @@ class Reflector:
             return 0.0
 
         recent = steps[-5:]
+        tool_names = [s.tool_call.tool_name if s.tool_call else "" for s in recent]
+
+        # Pattern 1: write/replace followed by read = verification
+        if self._has_verify_pattern(tool_names):
+            return 0.0
+
+        # Pattern 2: progressive reads with different offsets / staggered
+        # exploration — the agent is systematically gathering information.
+        if self._has_progressive_reads(recent):
+            return 0.0
+
+        # Keyword-overlap heuristic.
         relevant_count = 0
         for s in recent:
-            # Include thought, observation, and tool call info for relevance
             text_parts = [s.thought, s.observation]
             if s.tool_call:
                 text_parts.append(s.tool_call.tool_name)
@@ -111,6 +128,34 @@ class Reflector:
                 relevant_count += 1
 
         return 1.0 - (relevant_count / len(recent))
+
+    # -- Pattern helpers --
+
+    @staticmethod
+    def _has_verify_pattern(tool_names: list[str]) -> bool:
+        """True when recent tool calls contain a write→read pair, which
+        is a normal verification step, not stuck behavior."""
+        for i in range(len(tool_names) - 1):
+            if tool_names[i] in ("write_file", "replace_in_file") and tool_names[i + 1] == "read_file":
+                return True
+        return False
+
+    @staticmethod
+    def _has_progressive_reads(recent_steps: list[Step]) -> bool:
+        """True when the agent is reading a file at different offsets —
+        systematic exploration, not a loop."""
+        read_args: list[dict] = []
+        for s in recent_steps:
+            if s.tool_call and s.tool_call.tool_name == "read_file":
+                read_args.append(s.tool_call.arguments)
+        if len(read_args) < 2:
+            return False
+        offsets: set[int] = set()
+        for args in read_args:
+            if "offset" in args:
+                offsets.add(args["offset"])
+        # At least two different offsets → progressive exploration.
+        return len(offsets) >= 2
 
     def summarize_errors(self, errors: list[str]) -> str:
         """Deduplicate and categorize errors into a summary."""

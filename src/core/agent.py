@@ -63,7 +63,24 @@ class Agent:
             on_thought=on_thought,
         )
         self._record_usage(response.usage, session_id=session_id)
+        notice = self._build_interruption_notice(response.finish_reason)
+        if notice:
+            return response.content + notice
         return response.content
+
+    # Mapping from LLM finish_reason to human-readable interruption notice.
+    _FINISH_REASON_NOTICE: dict[str, str] = {
+        "length": "\n\n---\n> ⚠️ 响应被中断：达到 token 上限，响应被截断",
+        "content_filter": "\n\n---\n> ⚠️ 响应被中断：内容被安全系统过滤",
+        "insufficient_system_resource": "\n\n---\n> ⚠️ 响应被中断：服务器资源不足",
+        "thinking_exhausted": "\n\n---\n> ⚠️ 思考被中断：思考过程消耗了所有 token 预算，未能生成有效响应。请增大 `max_tokens` 设置。",
+    }
+
+    @classmethod
+    def _build_interruption_notice(cls, finish_reason: str) -> str:
+        """Return a markdown interruption notice for the given finish_reason,
+        or empty string if no notice is needed."""
+        return cls._FINISH_REASON_NOTICE.get(finish_reason, "")
 
     async def chat_stream(self, messages: list[dict[str, Any]], session_id: str = "",
                           on_thought: Callable[[str], None] | None = None):
@@ -76,6 +93,9 @@ class Agent:
                 on_thought=on_thought,
             ):
                 yield chunk
+            notice = self._build_interruption_notice(self.llm.last_finish_reason)
+            if notice:
+                yield notice
         finally:
             self._record_usage(self.llm.last_usage, session_id=session_id)
 
@@ -92,13 +112,15 @@ class Agent:
         name_to_func: dict[str, object] = {}
         try:
             from agent_engine.builtin_tools import (
-                calculate, read_file, write_file, list_files, web_search, execute_python,
+                calculate, read_file, write_file, list_files, replace_in_file,
+                web_search, execute_python,
             )
             name_to_func = {
                 "calculate": calculate,
                 "read_file": read_file,
                 "write_file": write_file,
                 "list_files": list_files,
+                "replace_in_file": replace_in_file,
                 "web_search": web_search,
                 "execute_python": execute_python,
             }

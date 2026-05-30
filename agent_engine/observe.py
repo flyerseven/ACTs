@@ -25,6 +25,21 @@ class Event:
         self.data = data or {}
 
 
+# Event → loguru level mapping.  Lifecycle events are informational;
+# per-step detail events are DEBUG so they only appear in the file sink
+# (or on console when debug mode is active).
+_EVENT_LEVELS: dict[str, str] = {
+    "start":       "INFO",
+    "done":        "INFO",
+    "stopped":     "WARNING",
+    "step_start":  "DEBUG",
+    "step_end":    "DEBUG",
+    "tool_call":   "DEBUG",
+    "tool_result": "DEBUG",
+    "reflection":  "INFO",
+}
+
+
 class Observer:
     """Unified observability layer.
 
@@ -34,24 +49,39 @@ class Observer:
     - Runtime metrics report
     """
 
-    def __init__(self, log_format: str = "text"):
+    def __init__(self, log_format: str = "text", log_level: str = "INFO"):
         self._callbacks: list[Callable[[Event], None]] = []
         self._events: list[Event] = []
-        self._setup_logging(log_format)
+        self._setup_logging(log_format, log_level)
 
-    def _setup_logging(self, log_format: str) -> None:
+    def _setup_logging(self, log_format: str, log_level: str = "INFO") -> None:
+        """Configure loguru for standalone use (CLI mode).
+
+        When the application entry point (main.py) has already called
+        ``setup_logging()`` from ``utils.logger``, loguru will already
+        have handlers — we skip reconfiguration to preserve those
+        dual-sink settings.
+
+        In standalone CLI mode (no prior setup), we add a minimal
+        console sink so output is visible.
+        """
+        if _loguru_logger._core.handlers:
+            # Already configured by the application (e.g. main.py via
+            # utils.logger.setup_logging).  Don't overwrite.
+            return
+
         _loguru_logger.remove()
         if log_format == "json":
             _loguru_logger.add(
                 sys.stderr,
                 format='{"time":"{time}","level":"{level}","message":"{message}"}',
-                level="INFO",
+                level=log_level,
             )
         else:
             _loguru_logger.add(
                 sys.stderr,
                 format="<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-                level="INFO",
+                level=log_level,
                 colorize=True,
             )
 
@@ -62,9 +92,15 @@ class Observer:
         self._callbacks.append(callback)
 
     def emit(self, event: Event) -> None:
-        """Emit an event to all registered callbacks and the log."""
+        """Emit an event to registered callbacks and the log.
+
+        The log level is chosen based on the event type:
+        lifecycle events (start/done/stopped) use INFO/WARNING;
+        per-step detail events use DEBUG.
+        """
         self._events.append(event)
-        _loguru_logger.info(f"[{event.type}] {event.data}")
+        level = _EVENT_LEVELS.get(event.type, "DEBUG")
+        _loguru_logger.log(level, "[{}] {}", event.type, event.data)
         for cb in self._callbacks:
             try:
                 cb(event)
@@ -128,6 +164,7 @@ class Observer:
             f"  Tool calls:   {tool_calls}",
             f"  Tool errors:  {tool_errors}",
             f"  Errors:       {len(state.errors)}",
+            f"  Warnings:     {len(state.warnings)}",
             f"  Elapsed:      {elapsed}",
             "=" * 50,
         ]

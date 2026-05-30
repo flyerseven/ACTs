@@ -79,11 +79,15 @@ class StateManager:
             if not current.startswith("[✓] "):
                 self.state.sub_goals[index] = f"[✓] {current}"
 
-    # -- Errors --
+    # -- Errors & Warnings --
 
     def record_error(self, error: str) -> None:
         if error not in self.state.errors:
             self.state.errors.append(error)
+
+    def record_warning(self, warning: str) -> None:
+        if warning not in self.state.warnings:
+            self.state.warnings.append(warning)
 
     def get_error_summary(self) -> str:
         if not self.state.errors:

@@ -42,9 +42,10 @@ class MemoryManager:
     def get_messages(self) -> list[Message]:
         return list(self._messages)
 
-    def get_context_messages(self, max_tokens: int = 6000) -> list[dict]:
+    def get_context_messages(self, max_tokens: int = 24000) -> list[dict]:
         """Return messages formatted for LLM API, truncated to fit max_tokens.
-        System prompt is always included. Recent messages prioritized."""
+        System prompt and the first user message (the goal) are always
+        included. Recent messages are prioritized after that."""
         max_chars = max_tokens * 4
         result: list[dict] = []
         chars_used = 0
@@ -54,6 +55,15 @@ class MemoryManager:
             if m.role == "system":
                 result.append({"role": m.role, "content": m.content})
                 chars_used += len(m.content)
+                break
+
+        # Find the first user message (the goal) — always include it,
+        # even if we exceed max_chars.  Without the goal the LLM has
+        # no idea what it's supposed to do.
+        first_user_content: str | None = None
+        for m in self._messages:
+            if m.role == "user":
+                first_user_content = m.content
                 break
 
         # Add most recent messages first (reverse), then reverse back
@@ -75,11 +85,18 @@ class MemoryManager:
                 msg_dict["name"] = m.name
             if m.tool_calls:
                 msg_dict["tool_calls"] = m.tool_calls
-            if chars_used + len(m.content or "") <= max_chars:
+            msg_len = len(m.content or "")
+            if chars_used + msg_len <= max_chars:
                 recent.append(msg_dict)
-                chars_used += len(m.content or "")
+                chars_used += msg_len
             else:
-                break
+                # If this is the goal message, force it in anyway
+                if m.role == "user" and m.content == first_user_content:
+                    recent.append(msg_dict)
+                    chars_used += msg_len
+                    logger.debug("get_context_messages: forced goal message in (over budget)")
+                else:
+                    break
 
         recent.reverse()
         return result + recent

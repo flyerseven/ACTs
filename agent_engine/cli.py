@@ -16,6 +16,11 @@ from core.models import LLMConfig
 
 def build_engine(args) -> AgentEngine:
     """Build an AgentEngine from CLI arguments."""
+    # Resolve log level: --log-level takes precedence, --debug sets DEBUG
+    log_level = getattr(args, "log_level", "INFO")
+    if args.debug and log_level == "INFO":
+        log_level = "DEBUG"
+
     config = EngineConfig(
         max_steps=args.max_steps,
         reflect_interval=args.reflect_interval,
@@ -23,6 +28,7 @@ def build_engine(args) -> AgentEngine:
         llm_base_url=args.base_url,
         llm_model=args.model,
         log_format="json" if args.json_log else "text",
+        log_level=log_level,
         workspace_dir=args.workspace,
         debug=args.debug,
     )
@@ -133,6 +139,8 @@ def main():
     run_parser.add_argument("--mermaid", default="")
     run_parser.add_argument("--json-log", action="store_true")
     run_parser.add_argument("--debug", "-d", action="store_true", help="Enable real-time debug output to stderr")
+    run_parser.add_argument("--log-level", default="INFO",
+        choices=["TRACE", "DEBUG", "INFO", "WARNING", "ERROR"])
 
     # Tools
     sub.add_parser("tools", help="List available tools")

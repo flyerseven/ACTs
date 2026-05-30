@@ -16,6 +16,7 @@ class LLMResponse:
     tool_calls: list[dict[str, Any]] = field(default_factory=list)
     usage: dict[str, int] | None = None
     raw: dict[str, Any] = field(default_factory=dict)
+    finish_reason: str = ""
 
 
 class LLMAdapter(ABC):
@@ -27,6 +28,7 @@ class LLMAdapter(ABC):
 
     def __init__(self) -> None:
         self.last_usage: dict[str, int] | None = None
+        self.last_finish_reason: str = ""
 
     @abstractmethod
     async def chat(

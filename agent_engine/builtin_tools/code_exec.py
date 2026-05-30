@@ -21,12 +21,16 @@ def execute_python(code: str, timeout_sec: float = 10.0) -> str:
             script_path = Path(tmpdir) / "script.py"
             script_path.write_text(code, encoding="utf-8")
 
+            env = {"PYTHONIOENCODING": "utf-8"}
             result = subprocess.run(
                 ["python", str(script_path)],
                 capture_output=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
                 timeout=timeout_sec,
                 cwd=tmpdir,
+                env=env,
             )
 
             output = result.stdout

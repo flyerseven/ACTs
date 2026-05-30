@@ -66,6 +66,7 @@ class AgentState(BaseModel):
     current_step_index: int = 0
     status: Literal["idle", "running", "paused", "done", "failed", "stopped"] = "idle"
     errors: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)
     metrics: dict = Field(default_factory=dict)
     started_at: datetime | None = None
     finished_at: datetime | None = None

@@ -23,6 +23,8 @@ from typing import TYPE_CHECKING
 
 import sys
 
+from loguru import logger
+
 from core.agent import Agent
 from core.models import agent_config_from_dict, session_meta_from_dict, session_meta_to_dict, utc_now_iso
 from core.session import Session
@@ -98,6 +100,7 @@ class EngineWorker(QThread):
     tool_result_signal = pyqtSignal(int, str, str, float)
     reflection_signal = pyqtSignal(int, str, bool)
     step_end_signal = pyqtSignal(int, bool)
+    engine_truncated = pyqtSignal(int)  # step_index where response was truncated
     engine_started = pyqtSignal(str)
     engine_finished = pyqtSignal(str, int, str)
     engine_failed_signal = pyqtSignal(str)
@@ -128,7 +131,6 @@ class EngineWorker(QThread):
         agent = await Agent.load(self.agent_id, self.store, self.vault, token_tracker=self.token_tracker)
         api_key = self.vault.resolve_key_ref(agent.config.model.api_key_ref)
         engine = agent.create_engine(api_key)
-        engine.config.debug = True  # enable stderr debug output for console visibility
 
         # Load session conversation history into engine memory so the
         # agent has full context.  engine.run() sets its own system
@@ -158,8 +160,8 @@ class EngineWorker(QThread):
                 if skill and skill.prompt_extension:
                     extensions.append(skill.prompt_extension)
                 elif not skill:
-                    print(f"  [!] Skill '{skill_name}' not found in {skills_dir} (available: {list(all_skills.keys())})",
-                          flush=True, file=sys.stderr)
+                    logger.warning("Skill '{}' not found in {} (available: {})",
+                                   skill_name, skills_dir, list(all_skills.keys()))
             if extensions:
                 skill_blocks = "\n\n---\n\n".join(extensions)
                 if system_prompt.strip():
@@ -167,8 +169,8 @@ class EngineWorker(QThread):
                 else:
                     system_prompt = skill_blocks
 
-        print(f"\n  SKILLS enabled: {enabled if enabled else '(none)'}", flush=True, file=sys.stderr)
-        print(f"  SYSTEM PROMPT ({len(system_prompt)} chars)", flush=True, file=sys.stderr)
+        logger.debug("SKILLS enabled: {}", enabled if enabled else "(none)")
+        logger.debug("SYSTEM PROMPT ({} chars)", len(system_prompt))
 
         step_index = 0
 
@@ -187,6 +189,9 @@ class EngineWorker(QThread):
             if event.type == "step_start":
                 step_index = event.data.get("index", step_index)
             elif event.type == "step_end":
+                phase = event.data.get("phase", "")
+                if phase == "retry_truncated":
+                    self.engine_truncated.emit(step_index)
                 self.step_end_signal.emit(step_index, False)
             elif event.type == "done":
                 self.step_end_signal.emit(step_index, True)
@@ -817,6 +822,7 @@ class SessionPanel(QWidget):
                 self._worker.tool_result_signal.disconnect()
                 self._worker.reflection_signal.disconnect()
                 self._worker.step_end_signal.disconnect()
+                self._worker.engine_truncated.disconnect()
                 self._worker.engine_finished.disconnect()
                 self._worker.finished_reply.disconnect()
                 self._worker.engine_failed_signal.disconnect()
@@ -838,6 +844,7 @@ class SessionPanel(QWidget):
         self._worker.tool_result_signal.connect(self._on_engine_tool_result)
         self._worker.reflection_signal.connect(self._on_engine_reflection)
         self._worker.step_end_signal.connect(self._on_engine_step_end)
+        self._worker.engine_truncated.connect(self._on_engine_truncated)
         self._worker.engine_finished.connect(self._on_engine_finished)
         self._worker.finished_reply.connect(self._on_engine_reply)
         self._worker.engine_failed_signal.connect(self._on_engine_failed)
@@ -872,7 +879,7 @@ class SessionPanel(QWidget):
             self._active_tool_widgets[key] = tool_widget
             self.chat_view.scroll_to_bottom()
         except Exception as exc:
-            print(f"  [!] Tool call widget error: {exc}", flush=True, file=sys.stderr)
+            logger.error("Tool call widget error: {}", exc)
 
     def _on_engine_tool_result(self, step_index: int, result: str, error: str, duration_ms: float) -> None:
         if not self._stream_bubble:
@@ -897,17 +904,27 @@ class SessionPanel(QWidget):
                         break
             self.chat_view.scroll_to_bottom()
         except Exception as exc:
-            print(f"  [!] Tool result widget error: {exc}", flush=True, file=sys.stderr)
+            logger.error("Tool result widget error: {}", exc)
 
     def _on_engine_reflection(self, step_index: int, summary: str, is_stuck: bool) -> None:
         tag = "STUCK" if is_stuck else "OK"
-        out = sys.stderr if is_stuck else sys.stdout
-        print(f"  [Step {step_index}] REFLECT [{tag}]: {summary[:200]}", flush=True, file=out)
+        if is_stuck:
+            logger.warning("[Step {}] REFLECT [{}]: {}", step_index, tag, summary[:200])
+        else:
+            logger.info("[Step {}] REFLECT [{}]: {}", step_index, tag, summary[:200])
 
     def _on_engine_step_end(self, step_index: int, _is_completed: bool) -> None:
         print(f"  [Step {step_index}] ── step complete", flush=True)
         if self._stream_bubble and self._stream_bubble.thinking_widget.isVisible():
             self._stream_bubble.finalize_thinking()
+
+    def _on_engine_truncated(self, step_index: int) -> None:
+        """Called when the engine detects a truncated/empty LLM response and
+        is about to retry.  Shows a brief status note once per stream."""
+        if self._stream_bubble and self._stream_bubble.thinking_widget.isVisible():
+            self._stream_bubble.set_loading_status(
+                "Token 不足，正在重试…"
+            )
 
     def _on_engine_finished(self, status: str, total_steps: int, errors_json: str) -> None:
         import json
@@ -920,6 +937,7 @@ class SessionPanel(QWidget):
             if self._stream_bubble.thinking_widget.isVisible():
                 self._stream_bubble.finalize_thinking()
             self.chat_view.update_message(self._stream_bubble, reply, render_latex=True)
+            self._check_and_show_action(reply)
         self._enable_input()
         self._suppress_reload = True
         self.refresh_sessions()
@@ -927,7 +945,7 @@ class SessionPanel(QWidget):
         self.sessions_changed.emit()
 
     def _on_engine_failed(self, message: str) -> None:
-        print(f"  Engine FAILED: {message}", flush=True, file=sys.stderr)
+        logger.error("Engine FAILED: {}", message)
         if self._stream_bubble:
             self._stream_bubble.thinking_widget.setVisible(False)
             self.chat_view.update_message(self._stream_bubble, f"[Engine Error] {message}", render_latex=False)
@@ -959,6 +977,7 @@ class SessionPanel(QWidget):
             if self._stream_bubble.thinking_widget.isVisible():
                 self._stream_bubble.finalize_thinking()
             self.chat_view.flush_stream_to_message(self._stream_bubble)
+            self._check_and_show_action(reply)
         self._enable_input()
         self._suppress_reload = True
         self.refresh_sessions()
@@ -1217,3 +1236,79 @@ class SessionPanel(QWidget):
             self.chat_view.clear()
         Session.delete(session_id, self.store)
         self.sessions_changed.emit()
+
+    # ── Interruption action button ──────────────────────────────────────────
+
+    _INTERRUPT_TOKEN_KEYWORDS = ("token 上限", "token 预算")
+
+    def _check_and_show_action(self, reply: str) -> None:
+        """After a message is displayed, check for interruption notices and
+        show the appropriate action button."""
+        if not self._stream_bubble:
+            return
+        is_token_limit = any(kw in reply for kw in self._INTERRUPT_TOKEN_KEYWORDS)
+        if is_token_limit and self.active_session:
+            self._stream_bubble.action_triggered.connect(
+                self._on_increase_tokens, Qt.ConnectionType.UniqueConnection)
+            self._stream_bubble.show_action(
+                "🔼 暂时提高 max_tokens 到 4096", "increase_tokens")
+
+    def _on_increase_tokens(self, action_name: str) -> None:
+        """Handle the 'Increase max_tokens' action button click."""
+        if action_name != "increase_tokens" or not self.active_session:
+            return
+        if self._stream_bubble:
+            try:
+                self._stream_bubble.action_triggered.disconnect(
+                    self._on_increase_tokens)
+            except TypeError:
+                pass
+            self._stream_bubble.hide_action()
+
+        agent_id = self._current_agent_id()
+        if not agent_id:
+            return
+
+        try:
+            config_path = self.store.agent_yaml_path(agent_id)
+            data = read_yaml(config_path)
+            model = data.get("model", {})
+            current_max = model.get("max_tokens", 1024)
+            model["max_tokens"] = 4096
+            data["model"] = model
+            write_yaml(config_path, data)
+            logger.info(
+                "Increased max_tokens for agent '{}' from {} to 4096",
+                agent_id, current_max,
+            )
+        except Exception as exc:
+            logger.error("Failed to update agent max_tokens: {}", exc)
+            self.chat_view.add_message(
+                "system", f"无法修改 max_tokens: {exc}")
+            return
+
+        # Find the last user message content to re-send
+        last_content = ""
+        for msg in reversed(self.active_session.messages):
+            if msg.role == "user":
+                last_content = msg.content
+                break
+        if not last_content:
+            return
+
+        self.chat_view.add_message(
+            "system", f"已暂时将 max_tokens 从 {current_max} 提高到 4096，正在重新生成…")
+
+        self._suppress_reload = True
+        try:
+            agent_config = agent_config_from_dict(
+                read_yaml(self.store.agent_yaml_path(agent_id)))
+            if agent_config.enable_decision_core:
+                self._start_engine(agent_id, last_content)
+            else:
+                self._stream_text = ""
+                self._stream_bubble = self.chat_view.add_message(
+                    "assistant", "", render_latex=False)
+                self._start_stream(agent_id, last_content)
+        finally:
+            self._suppress_reload = False

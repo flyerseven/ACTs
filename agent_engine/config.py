@@ -40,8 +40,18 @@ class EngineConfig(BaseSettings):
     reflect_interval: int = 3
 
     # -- Memory --
-    compress_trigger_tokens: int = 6000
-    compress_target_tokens: int = 3000
+    compress_trigger_tokens: int = 14000
+    """Token threshold that triggers automatic context compression."""
+    compress_target_tokens: int = 8000
+    """Target token count after compression."""
+    context_max_tokens: int = 48000
+    """Max tokens the engine will send to the LLM in one request.
+    Must leave headroom below the model's context window (DeepSeek ≈ 64K,
+    GPT-4 ≈ 128K)."""
+    max_tool_result_chars: int = 16000
+    """Max characters of a tool result stored in memory.
+    Larger results are truncated with a note so the agent can use
+    paginated reads (read_file offset/limit) if it needs the rest."""
 
     # -- Logging --
     log_level: str = "INFO"

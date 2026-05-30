@@ -604,7 +604,7 @@ class ToolCallWidget(QFrame):
                 "color: #f44747; font-size: 12px; font-weight: 700; background: transparent;"
             )
             self._result_body.setPlainText(f"Error: {error}")
-            self._result_body.setVisible(True)
+            self._result_body.setVisible(False)
             self._result_toggle_btn.setVisible(True)
             self._result_toggle_btn.setText("▼ 展开")
             self._result_section.setVisible(True)
@@ -616,7 +616,7 @@ class ToolCallWidget(QFrame):
             )
             if result:
                 self._result_body.setPlainText(result)
-                self._result_body.setVisible(True)
+                self._result_body.setVisible(False)
                 self._result_toggle_btn.setVisible(True)
                 self._result_toggle_btn.setText("▼ 展开")
                 self._result_section.setVisible(True)
@@ -742,6 +742,9 @@ class ChatBubbleWidget(QFrame):
 
     _MAX_WEB_TEXTURE = 8000
 
+    # Signal emitted when the user clicks an action button in the bubble.
+    action_triggered = pyqtSignal(str)  # action_name
+
     def __init__(self, role: str, content: str) -> None:
         super().__init__()
         self.role = role
@@ -830,6 +833,19 @@ class ChatBubbleWidget(QFrame):
             self.label.setMinimumWidth(0)
             self.label.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
 
+        # ── action bar (shown for interruptible responses) ──
+        self._action_bar = QWidget()
+        self._action_bar.setVisible(False)
+        action_layout = QHBoxLayout(self._action_bar)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.addStretch(1)
+        self._action_button = QPushButton()
+        self._action_button.setFixedHeight(28)
+        self._action_button.clicked.connect(
+            lambda: self.action_triggered.emit(self._action_button.property("action_name") or "")
+        )
+        action_layout.addWidget(self._action_button)
+
         # set_content() is called by add_message / prepend_message right after
         # construction — calling it here too would render twice per bubble.
         self.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Preferred)
@@ -842,6 +858,7 @@ class ChatBubbleWidget(QFrame):
         layout.addWidget(self.thinking_widget)
         layout.addWidget(self.tool_call_container)
         layout.addWidget(self.label)
+        layout.addWidget(self._action_bar)
 
         self._apply_role_style(role)
 
@@ -940,6 +957,28 @@ class ChatBubbleWidget(QFrame):
         # Re-render if currently empty so the status takes effect
         if not self._raw_text:
             self._render()
+
+    def show_action(self, label: str, action_name: str) -> None:
+        """Show an action button below the message content.
+
+        When clicked, ``action_triggered`` is emitted with *action_name*.
+        """
+        self._action_button.setText(label)
+        self._action_button.setProperty("action_name", action_name)
+        self._action_button.setStyleSheet(
+            "QPushButton {"
+            "  background-color: #2d6a4f; color: #d8f3dc; border: none;"
+            "  border-radius: 6px; padding: 4px 16px; font-size: 12px; font-weight: 600;"
+            "}"
+            "QPushButton:hover {"
+            "  background-color: #40916c;"
+            "}"
+        )
+        self._action_bar.setVisible(True)
+
+    def hide_action(self) -> None:
+        """Hide the action button bar."""
+        self._action_bar.setVisible(False)
 
     # ── Tool calls ──────────────────────────────────────────────────────
 
