@@ -1023,6 +1023,14 @@ class SessionPanel(QWidget):
             except TypeError:
                 pass  # already disconnected
 
+        # Disconnect previous load worker signals so handlers never fire twice.
+        if self._load_worker is not None:
+            try:
+                self._load_worker.loaded.disconnect()
+                self._load_worker.failed.disconnect()
+            except TypeError:
+                pass  # already disconnected
+
         self._load_worker = LoadSessionWorker(session_id, self.store)
         self._load_worker.loaded.connect(self._on_session_loaded)
         self._load_worker.failed.connect(self._on_session_load_failed)
@@ -1152,11 +1160,19 @@ class SessionPanel(QWidget):
     def _load_more_messages(self) -> None:
         # Prevent re-entrant calls — prepend_message can trigger scrollbar
         # value changes that would fire scrolled_to_top again mid-loop.
+        # Prevent re-entrant calls — prepend_message can trigger scrollbar
+        # value changes that would fire scrolled_to_top again mid-loop.
         if self._suppress_scroll_load:
             return
         if not self.active_session:
             return
         current = list(self.active_session.messages)
+        # Always sync _all_messages so it reflects the latest session state.
+        # Do NOT adjust _display_offset for new messages — they were added at
+        # the bottom via add_message() and are already visible.  Only explicit
+        # _load_more_messages batches shrink _display_offset (see assignment
+        # below).  If offset reaches 0, all messages are in view.
+        self._all_messages = current
         # Always sync _all_messages so it reflects the latest session state.
         # Do NOT adjust _display_offset for new messages — they were added at
         # the bottom via add_message() and are already visible.  Only explicit
