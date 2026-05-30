@@ -41,16 +41,12 @@ def _is_c_drive(filepath: str) -> bool:
 def _resolve_safe(workspace: Path, filepath: str) -> Path:
     """Resolve a relative file path, ensuring it stays within workspace.
     Raises ValueError on path traversal attempts."""
-    """Resolve a relative file path, ensuring it stays within workspace.
-    Raises ValueError on path traversal attempts."""
     workspace = workspace.resolve()
     target = (workspace / filepath).resolve()
     if not str(target).startswith(str(workspace)):
         raise ValueError(f"Path traversal detected: {filepath}")
     return target
 
-
-# ── Read-only tools (full filesystem access) ─────────────────────────────
 
 # ── Read-only tools (full filesystem access) ─────────────────────────────
 
@@ -62,25 +58,13 @@ def read_file(filepath: str, workspace_dir: str = "") -> str:
       reads directly from that path — full filesystem access.
     - **Relative path** (e.g. ``src/main.py``, ``config.yaml``):
       resolved within the workspace directory.
-    """Read the contents of a file.
-
-    Supports two modes:
-    - **Absolute path** (e.g. ``D:\\data\\file.txt``, ``/etc/hosts``):
-      reads directly from that path — full filesystem access.
-    - **Relative path** (e.g. ``src/main.py``, ``config.yaml``):
-      resolved within the workspace directory.
 
     Args:
-        filepath: Absolute or relative path to the file.
         filepath: Absolute or relative path to the file.
         workspace_dir: Optional workspace root (defaults to ./workspace).
     """
     ws = Path(workspace_dir).resolve() if workspace_dir else _DEFAULT_WORKSPACE
     try:
-        if _is_absolute_path(filepath):
-            target = Path(filepath).resolve()
-        else:
-            target = _resolve_safe(ws, filepath)
         if _is_absolute_path(filepath):
             target = Path(filepath).resolve()
         else:
@@ -104,25 +88,13 @@ def list_files(directory: str = ".", workspace_dir: str = "") -> str:
       lists that directory directly — full filesystem access.
     - **Relative path** (e.g. ``src``, ``.``):
       resolved within the workspace directory.
-    """List files in a directory.
-
-    Supports two modes:
-    - **Absolute path** (e.g. ``D:\\projects``, ``/var/log``):
-      lists that directory directly — full filesystem access.
-    - **Relative path** (e.g. ``src``, ``.``):
-      resolved within the workspace directory.
 
     Args:
-        directory: Absolute or relative directory path (default: workspace root).
         directory: Absolute or relative directory path (default: workspace root).
         workspace_dir: Optional workspace root.
     """
     ws = Path(workspace_dir).resolve() if workspace_dir else _DEFAULT_WORKSPACE
     try:
-        if _is_absolute_path(directory):
-            target = Path(directory).resolve()
-        else:
-            target = _resolve_safe(ws, directory)
         if _is_absolute_path(directory):
             target = Path(directory).resolve()
         else:

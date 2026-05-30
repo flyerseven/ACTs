@@ -1173,12 +1173,6 @@ class SessionPanel(QWidget):
         # _load_more_messages batches shrink _display_offset (see assignment
         # below).  If offset reaches 0, all messages are in view.
         self._all_messages = current
-        # Always sync _all_messages so it reflects the latest session state.
-        # Do NOT adjust _display_offset for new messages — they were added at
-        # the bottom via add_message() and are already visible.  Only explicit
-        # _load_more_messages batches shrink _display_offset (see assignment
-        # below).  If offset reaches 0, all messages are in view.
-        self._all_messages = current
         if self._display_offset <= 0:
             return
         start = max(0, self._display_offset - self.PAGE_SIZE)
